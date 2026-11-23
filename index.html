@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Our Family Field Guide</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <div>
+      <div class="eyebrow">Open this first · Kept for the people I love</div>
+      <h1>Our Family <em>Field Guide</em></h1>
+      <p class="sub">If something has happened and I can't be there, take a breath. Everything you need to know next is in here, one step at a time. You don't have to do it all today.</p>
+    </div>
+    <div class="meter">
+      <small>Guide filled in</small><b id="pct">0%</b><div class="bar"><i id="barfill"></i></div>
+      <div class="rev" id="rev"></div>
+    </div>
+  </header>
+
+  <div class="privacy">🔒 <b>Your details stay on this device.</b> Nothing you type is sent anywhere; it saves in this browser automatically. Never type actual passwords or full account numbers here: write <i>where to find</i> them (your password manager, the safe) and the last 4 digits only. Use <b>Save backup</b> to make a passphrase‑locked copy your spouse can open on their own device. The code you put on GitHub never contains your family's details.</div>
+
+  <nav class="tabs" id="tabs"></nav>
+  <main id="panels"></main>
+</div>
+
+<dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
+<input type="file" id="fileIn" accept=".json,application/json" hidden>
+<div class="toast" id="toast"></div>
+
+<script src="schema.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
