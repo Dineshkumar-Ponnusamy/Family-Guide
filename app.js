@@ -39,7 +39,16 @@ function norm() {
   if (!allTabs().some(t => t.id === S.tab)) S.tab = "start";
 }
 function getRegion() {
-  return (typeof REGIONS !== "undefined" && REGIONS[S.region]) ? REGIONS[S.region] : { label: "United States", emergency: "911", currency: "$", crossBorder: false, indiaNotes: false, fieldOverrides: {}, listOverrides: {}, stepOverrides: {} };
+  const defMg = {
+    depositCap: "Keep cash split within national bank deposit-insurance limits (e.g. FDIC $250,000 / bank in US).",
+    taxNote: "Consult a CPA/tax advisor before selling inherited property or moving large payouts across borders.",
+    fiduciaryName: "Fee-Only Fiduciary Advisor (zero commissions)",
+    safeCash: "Insured High-Yield Savings Accounts or short-term government Treasury bills.",
+    sampleTitle: "Sample $1,000,000 Allocation",
+    sampleLines: []
+  };
+  const r = (typeof REGIONS !== "undefined" && REGIONS[S.region]) ? REGIONS[S.region] : { label: "United States", emergency: "911", currency: "$", crossBorder: false, indiaNotes: false, fieldOverrides: {}, listOverrides: {}, stepOverrides: {} };
+  return { ...r, moneyGuide: r.moneyGuide || defMg };
 }
 function rField(f) {
   const ov = getRegion().fieldOverrides?.[f[0]];
@@ -266,6 +275,44 @@ function photosBlockHtml(b) {
   </div>`;
 }
 
+function renderMoneyGuideHtml(forPrint = false) {
+  const mg = getRegion().moneyGuide || {};
+  const guides = (typeof MONEY_GUIDE !== "undefined" && Array.isArray(MONEY_GUIDE)) ? MONEY_GUIDE : [];
+  const f = id => String(S.f[id] || "").trim();
+  const val = txt => forPrint ? esc(txt) : linkify(txt);
+  const personal = [
+    ["First thing to do", f("m_payout_first")],
+    ["Debts to pay vs. hold", f("m_payout_payoff")],
+    ["Who to trust (and avoid)", f("m_payout_advisor")],
+    ["Monthly 'paycheck' setup", f("m_payout_monthly")],
+    ["Usual monthly spending", f("m_monthly")]
+  ].filter(([, v]) => v);
+
+  const inner = `<div class="mguide">
+    ${forPrint && personal.length ? `<div class="mg-ex"><h4>My Specific Instructions For This Family</h4><ul>${personal.map(([k, v]) => `<li><b>${esc(k)}:</b> ${val(v)}</li>`).join("")}</ul></div>` : ""}
+    <div class="mg-banner">
+      ${mg.depositCap ? `<p><b>Deposit insurance safety cap (${esc(getRegion().label)}):</b> ${esc(mg.depositCap)}</p>` : ""}
+      ${mg.safeCash ? `<p><b>Safe temporary parking:</b> ${esc(mg.safeCash)}</p>` : ""}
+      ${mg.fiduciaryName ? `<p><b>Who to hire:</b> ${esc(mg.fiduciaryName)}</p>` : ""}
+      ${mg.taxNote ? `<p><b>Tax &amp; legal note:</b> ${esc(mg.taxNote)}</p>` : ""}
+    </div>
+    ${mg.sampleLines?.length ? `<div class="mg-ex"><h4>${esc(mg.sampleTitle || "Sample Allocation")}</h4><ul>${mg.sampleLines.map(l => `<li>${esc(l)}</li>`).join("")}</ul></div>` : ""}
+    <div class="mg-grid">${guides.map(g => `<div class="mg-sec">
+      <div class="mg-sec-h"><h4>${esc(g.title)}</h4><span class="mg-badge">${esc(g.badge || "")}</span></div>
+      <p>${esc(g.summary)}</p>
+      <ul>${(g.bullets || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+      ${g.note ? `<div class="mg-note">${esc(g.note)}</div>` : ""}
+    </div>`).join("")}</div>
+    ${!forPrint ? `<div class="mg-acts"><button type="button" class="btn" data-act="printMoneyGuide">Print Survivor's Money Guide</button></div>` : ""}
+  </div>`;
+  if (!forPrint) return inner;
+  return `<div class="sheet">
+    <h1>Survivor's Guide to Handling Big Money &amp; Payouts</h1>
+    <p class="sheet-sub">${esc(getRegion().label)} · Updated ${new Date().toLocaleDateString()} · General educational guidance, not personal legal, tax, or investment advice.</p>
+    ${inner}
+  </div>`;
+}
+
 function block(b) {
   switch (b.type) {
     case "fields": {
@@ -285,6 +332,11 @@ function block(b) {
     case "list": {
       const lb = rList(b);
       return listCard(lb.id, lb.title, lb.hint, lb.cols, "", { crisisEditable: lb.crisisEditable, block: lb });
+    }
+    case "money_guide": {
+      const colKey = "mg:" + b.id;
+      const isCol = !S.readMode && collapsedCards.has(colKey);
+      return `<div class="card${isCol ? " collapsed" : ""}" data-block-id="${esc(b.id)}" data-block-title="${esc(b.title)}" data-ckey="${esc(colKey)}">${cardHeadHtml(b.title, "6-step guide", colKey)}<div class="card-body"><p class="hint">Plain-English instructions for someone who has never managed large savings or insurance payouts before. Covers what to do in Month 1, how to avoid bad salespeople, and how to turn $1M into steady income.</p>${renderMoneyGuideHtml(false)}</div></div>`;
     }
     case "photos": return photosBlockHtml(b);
     case "glance": {
@@ -504,6 +556,34 @@ function computeAudit() {
     ? { id: "digital_legacy", sev: "med", title: "No password manager or legacy contact noted", detail: "Set up Password Manager emergency access or Apple/Google Legacy Contacts.", tab: "docs", block: "Getting into things", field: "d_pm" }
     : { id: "digital_legacy", sev: "ok", title: "Digital legacy / password access set", detail: "Password manager or platform legacy contacts are documented." });
 
+  const cryptoRows = rowsOf("crypto");
+  if (cryptoRows.length) {
+    const hasSeedPhrase = cryptoRows.some(r => Object.values(r).some(v => /\b([a-z]{3,}\s+){11,}[a-z]{3,}\b/i.test(String(v || ""))));
+    const missCryptoAccess = cryptoRows.some(r => !String(r.access || "").trim() || !String(r.helper || "").trim());
+    if (hasSeedPhrase) {
+      items.push({ id: "crypto_safety", sev: "high", title: "Possible crypto seed phrase detected!", detail: "Never store 12/24-word recovery seeds in this guide—write ONLY where the physical backup lives.", tab: "money", block: "crypto" });
+    } else if (missCryptoAccess) {
+      items.push({ id: "crypto_safety", sev: "med", title: "Crypto entry missing recovery location or helper", detail: "Record where the seed/hardware wallet is stored and a trusted helper who can assist safely.", tab: "money", block: "crypto" });
+    } else {
+      items.push({ id: "crypto_safety", sev: "ok", title: "Crypto recovery map documented (no raw seeds)", detail: "Holdings, storage locations, and trusted helper instructions are recorded." });
+    }
+  }
+
+  const govRows = rowsOf("gov_ids");
+  if (govRows.length) {
+    const hasFullGovId = govRows.some(r => Object.values(r).some(v => /\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b|\b\d{9,}\b/.test(String(v || ""))));
+    items.push(hasFullGovId
+      ? { id: "gov_id_privacy", sev: "high", title: "Possible full SSN / National ID detected!", detail: "Safety rule: enter ONLY the last 4 digits and where the original card lives—remove full ID numbers.", tab: "docs", block: "gov_ids" }
+      : { id: "gov_id_privacy", sev: "ok", title: "Key IDs mapped safely (last 4 only)", detail: "Government IDs record only last 4 digits and physical locations." });
+  }
+
+  if (f("q_life") || lifeRows.length) {
+    const hasPayoutGuide = Boolean(f("m_payout_first") || f("m_payout_payoff") || f("m_payout_advisor") || f("m_payout_monthly"));
+    items.push(hasPayoutGuide
+      ? { id: "payout_plan", sev: "ok", title: "Survivor big-money instructions documented", detail: "Plain-English instructions for handling insurance payouts are filled in." }
+      : { id: "payout_plan", sev: "med", title: "Add personal instructions for life insurance / big money", detail: "Tell your spouse what to do first with payouts, which debts to leave alone, and who to trust.", tab: "money", block: "My instructions for big money / insurance payouts", field: "m_payout_first" });
+  }
+
   if (reg.crossBorder) {
     const hasVisaInfo = S.customTabs.some(t => /visa|immig|cross|india|nri/i.test(t.label + " " + t.title))
       || /i-797|i-140|h-1b|h-4|oci|visa/i.test(JSON.stringify(S.f) + JSON.stringify(S.lists.doclocs || []));
@@ -685,6 +765,14 @@ function runSearch(q) {
       push("start", "Scripts", title, body, "What to say");
     }
   });
+  if (typeof MONEY_GUIDE !== "undefined") {
+    MONEY_GUIDE.forEach(g => {
+      const txt = `${g.title} ${g.summary} ${(g.bullets || []).join(" ")} ${g.note || ""}`.toLowerCase();
+      if (txt.includes(term)) {
+        push("money", "Money Guide", g.title, g.summary, "money_guide");
+      }
+    });
+  }
 
   res.innerHTML = hits.length
     ? hits.map((h, i) => `<button type="button" class="sr-item" data-sr="${i}"><span class="sr-tab">${esc(h.tabLabel)}</span><span class="sr-txt"><b>${esc(h.title)}</b>${h.sub ? ` — ${esc(h.sub)}` : ""}</span></button>`).join("")
@@ -855,6 +943,8 @@ document.addEventListener("click", e => {
   if (d.act === "reviewed") { S.reviewed = new Date().toISOString(); save(true); toast("Marked as reviewed"); }
   if (d.act === "readiness") readinessDialog();
   if (d.act === "ics") downloadIcs();
+  if (d.act === "printMoneyGuide") { $("#printSheet").innerHTML = renderMoneyGuideHtml(true); printWithClass("print-sheet-only"); }
+  if (d.act === "printErSheet") { renderErGrabSheet(); printWithClass("print-sheet-only"); }
   if (d.act === "print") printDialog();
   if (d.act === "backup") backupDialog();
   if (d.act === "restore") restoreDialog();
@@ -1164,6 +1254,54 @@ function renderCoverSheet(passHint, fileLoc) {
   </div>`;
 }
 
+function renderErGrabSheet() {
+  const f = id => String(S.f[id] || "").trim();
+  const rowsOf = id => (S.lists[id] || []).filter(r => rowHasFilledValue(id, r));
+  const first = rowsOf("first");
+  const famHealth = rowsOf("fam_health");
+  const item = (lbl, val) => val ? `<p><b>${esc(lbl)}:</b> ${esc(val)}</p>` : "";
+
+  $("#printSheet").innerHTML = `<div class="sheet">
+    <h1>1-Page ER &amp; Medical Treatment Grab Sheet</h1>
+    <p class="sheet-sub">Keep folded in wallet, bag, or on the fridge for sudden ER trips. Emergency #: <b>${esc(getRegion().emergency)}</b> · Updated ${new Date().toLocaleDateString()}</p>
+    <div class="sheet-grid">
+      <div class="sheet-box full er-alert">
+        <h3>Red-Flag Rules &amp; 24/7 Specialist Triage</h3>
+        <div class="sheet-giant">${esc(f("h_triage") || "Add 24/7 specialist triage line & preferred ER under Health")}</div>
+        ${item("Red-flag rule", f("h_redflag") || "Check fever / blood pressure / breathing rule and call specialist triage BEFORE giving fever-reducers.")}
+      </div>
+      <div class="sheet-box">
+        <h3>Diagnosis, Protocol &amp; Warnings</h3>
+        ${item("Diagnosis / treatment", f("h_diag"))}
+        ${item("Ports / implants / NO-arm limits", f("h_devices"))}
+        ${item("Food / drug / visitor boundaries", f("h_comfort"))}
+        ${item("Life support wishes", f("h_wishes"))}
+        ${!f("h_diag") && !f("h_devices") && !f("h_comfort") ? `<p>Fill under Health → Chronic / critical illness &amp; ER care.</p>` : ""}
+      </div>
+      <div class="sheet-box">
+        <h3>Medications, Rescue Kit &amp; Allergies</h3>
+        ${item("Daily meds &amp; allergies", f("d_meds"))}
+        ${item("Rescue / just-in-case meds", f("h_rescue"))}
+        ${item("Pharmacy", f("h_pharm"))}
+      </div>
+      <div class="sheet-box">
+        <h3>Proxy, Portal &amp; Insurance</h3>
+        ${item("Medical POA / Advocate", f("d_mpoa"))}
+        ${item("Healthcare directive", f("d_hcd"))}
+        ${item("Patient portal proxy &amp; HIPAA", f("h_portal"))}
+        ${item("Health insurance &amp; ID", f("d_ins"))}
+      </div>
+      <div class="sheet-box">
+        <h3>Emergency Contacts &amp; Family Meds</h3>
+        ${item("Call first", f("q_first"))}
+        ${first.length ? `<ul>${first.map(r => `<li><b>${esc(r.name || r.rel || "Contact")}</b>: ${esc(r.phone || "")}</li>`).join("")}</ul>` : ""}
+        ${famHealth.length ? `<ul>${famHealth.map(r => `<li><b>${esc(r.name || "Person")}</b>${r.allergy ? ` · Allergy: ${esc(r.allergy)}` : ""}${r.meds ? ` · Meds: ${esc(r.meds)}` : ""}</li>`).join("")}</ul>` : ""}
+      </div>
+    </div>
+    <p class="sheet-foot">Full medication doses, EOB logs, and directives live in Our Family Field Guide (${esc(f("q_binder") || "see Home Safe / Guide")}).</p>
+  </div>`;
+}
+
 function renderExecutiveSummaryHtml(forPrint = false) {
   const f = id => String(S.f[id] || "").trim();
   const rowsOf = id => (S.lists[id] || []).filter(r => rowHasFilledValue(id, r));
@@ -1174,13 +1312,16 @@ function renderExecutiveSummaryHtml(forPrint = false) {
   const pros = rowsOf("pros");
   const accts = rowsOf("accounts");
   const invest = rowsOf("invest");
+  const crypto = rowsOf("crypto");
   const ins = rowsOf("insurance");
   const bills = rowsOf("bills");
   const debts = rowsOf("debts");
   const prop = rowsOf("property");
   const docs = rowsOf("doclocs");
+  const govIds = rowsOf("gov_ids");
   const kidsInfo = rowsOf("kids_info");
   const pets = rowsOf("pets");
+  const hasIllness = Boolean(f("h_diag") || f("h_triage") || f("h_redflag") || f("h_devices") || f("h_rescue"));
 
   const line = (label, v) => v ? `<p><b>${esc(label)}:</b> ${val(v)}</p>` : "";
   const shutoffs = [["Water", f("hk_water")], ["Gas", f("hk_gas")], ["Breaker", f("hk_breaker")], ["Spare keys", f("hk_spare")]].filter(([, v]) => v);
@@ -1197,10 +1338,12 @@ function renderExecutiveSummaryHtml(forPrint = false) {
       </div>
 
       <div class="exec-box">
-        <div class="exec-h"><h4>2. Money, Accounts &amp; Debts</h4>${jmpBtn("money", "accounts")}</div>
+        <div class="exec-h"><h4>2. Money, Accounts &amp; Payout Plan</h4>${jmpBtn("money", "accounts")}</div>
         ${line("Monthly spend", f("m_monthly"))}
         ${line("Runway / cash", [f("q_runway") || f("m_runway"), f("m_cash")].filter(Boolean).join(" · "))}
+        ${line("Payout first step", f("m_payout_first"))}
         ${accts.length ? `<ul>${accts.map(r => `<li><b>${esc(r.inst || r.type || "Account")}</b> (${esc(r.type || "")}${r.own ? `, ${esc(r.own)}` : ""}${r.last4 ? ` · *${esc(r.last4)}` : ""})</li>`).join("")}</ul>` : ""}
+        ${crypto.length ? `<p style="margin-top:4px"><b>Crypto / Digital:</b> ${crypto.map(r => `${esc(r.platform || "Wallet")}${r.access ? ` (${esc(r.access)})` : ""}`).join(" · ")}</p>` : ""}
         ${debts.length ? `<p style="margin-top:4px"><b>Loans / Debts:</b> ${debts.map(r => `${esc(r.type || r.name)}${r.bal ? ` (${esc(r.bal)})` : ""}`).join(" · ")}</p>` : ""}
         ${bills.length ? `<p><b>Key Bills:</b> ${bills.slice(0, 6).map(r => `${esc(r.name)}${r.amt ? ` ${esc(r.amt)}` : ""}`).join(" · ")}</p>` : ""}
       </div>
@@ -1213,11 +1356,12 @@ function renderExecutiveSummaryHtml(forPrint = false) {
       </div>
 
       <div class="exec-box">
-        <div class="exec-h"><h4>4. Papers, Phone &amp; Property</h4>${jmpBtn("docs", "Legal papers")}</div>
+        <div class="exec-h"><h4>4. Papers, IDs, Phone &amp; Property</h4>${jmpBtn("docs", "Legal papers")}</div>
         ${line("Papers location", f("q_binder"))}
         ${line("Will / trust", f("d_will"))}
         ${line("Directive / POA", [f("d_hcd"), f("d_fpoa")].filter(Boolean).join(" · "))}
         ${line("Phone / Vault", [f("d_phone"), f("d_pm")].filter(Boolean).join(" · "))}
+        ${govIds.length ? `<p><b>Key IDs:</b> ${govIds.slice(0, 5).map(r => `${esc(r.idtype || "ID")}${r.last4 ? ` *${esc(r.last4)}` : ""}${r.where ? ` (${esc(r.where)})` : ""}`).join(" · ")}</p>` : ""}
         ${prop.length ? `<p><b>Property / Titles:</b> ${prop.map(r => `${esc(r.what)}${r.where ? ` (${esc(r.where)})` : ""}`).join(" · ")}</p>` : ""}
         ${docs.length ? `<p><b>Docs:</b> ${docs.slice(0, 5).map(r => `${esc(r.doc)} → ${esc(r.where)}`).join(" · ")}</p>` : ""}
       </div>
@@ -1230,6 +1374,14 @@ function renderExecutiveSummaryHtml(forPrint = false) {
         ${pets.length ? `<ul>${pets.map(r => `<li><b>${esc(r.name || "Pet")}:</b> ${[r.food, r.vet].filter(Boolean).map(esc).join(" · ")}</li>`).join("")}</ul>` : ""}
         ${shutoffs.length ? `<p><b>Shut-offs:</b> ${shutoffs.map(([k, v]) => `${esc(k)}: ${esc(v)}`).join(" · ")}</p>` : ""}
       </div>
+
+      ${hasIllness ? `<div class="exec-box full er-alert">
+        <div class="exec-h"><h4>6. Active Illness / ER Alert</h4>${jmpBtn("health", "Chronic / critical illness & ER care")}</div>
+        ${line("Diagnosis / protocol", f("h_diag"))}
+        ${line("24/7 triage & preferred ER", f("h_triage"))}
+        ${line("Red-flag rule", f("h_redflag"))}
+        ${line("Ports / arm limits / rescue meds", [f("h_devices"), f("h_rescue")].filter(Boolean).join(" · "))}
+      </div>` : ""}
     </div>
   </div>`;
 }
@@ -1262,7 +1414,9 @@ function summaryDialog() {
 function printDialog() {
   openDlg(`<h3>Print options</h3>
     <div class="opt-list">
-      <label class="opt-card"><input type="radio" name="pmode" value="summary" checked><div><b>1-page Family Executive Summary</b><small>High-signal overview of contacts, money, insurance, papers, titles, kids &amp; shut-offs.</small></div></label>
+      <label class="opt-card"><input type="radio" name="pmode" value="summary" checked><div><b>1-page Family Executive Summary</b><small>High-signal overview of contacts, money, insurance, IDs, papers, titles, kids &amp; shut-offs.</small></div></label>
+      <label class="opt-card"><input type="radio" name="pmode" value="er"><div><b>1-page ER &amp; Medical Grab Sheet</b><small>Diagnosis, red-flag fever/ER rule, 24/7 specialist triage, ports/arm limits, rescue meds &amp; portal proxy.</small></div></label>
+      <label class="opt-card"><input type="radio" name="pmode" value="moneyguide"><div><b>Survivor's Money &amp; Payout Guide</b><small>Your payout instructions plus the 6-part plain-English guide for handling large insurance payouts.</small></div></label>
       <label class="opt-card"><input type="radio" name="pmode" value="filled"><div><b>Full guide — filled details only</b><small>Omits empty fields and blank rows so your binder stays clean.</small></div></label>
       <label class="opt-card"><input type="radio" name="pmode" value="all"><div><b>Full guide — include blanks</b><small>Great if you want space to fill things in by hand.</small></div></label>
       <label class="opt-card"><input type="radio" name="pmode" value="caregiver"><div><b>1-page Caregiver / Fridge Sheet</b><small>Home address for ${esc(getRegion().emergency)}, first contacts, kids' pickup/allergies, pets, and shut-offs.</small></div></label>
@@ -1280,6 +1434,8 @@ function printDialog() {
     const mode = $("#dlgForm").querySelector('input[name="pmode"]:checked').value;
     $("#dlg").close();
     if (mode === "summary") { $("#printSheet").innerHTML = renderExecutiveSummaryHtml(true); printWithClass("print-sheet-only"); }
+    else if (mode === "er") { renderErGrabSheet(); printWithClass("print-sheet-only"); }
+    else if (mode === "moneyguide") { $("#printSheet").innerHTML = renderMoneyGuideHtml(true); printWithClass("print-sheet-only"); }
     else if (mode === "filled") printWithClass("print-hide-empty");
     else if (mode === "all") printWithClass("");
     else if (mode === "caregiver") { renderCaregiverSheet(); printWithClass("print-sheet-only"); }
@@ -1440,7 +1596,7 @@ $("#photoIn").onchange = async e => {
 };
 
 function buildStandaloneHtml(pkg) {
-  const schemaData = { TABS, PLAYBOOK, SCRIPTS, GLANCE, KIDS, REGIONS: typeof REGIONS !== "undefined" ? REGIONS : {} };
+  const schemaData = { TABS, PLAYBOOK, SCRIPTS, GLANCE, KIDS, MONEY_GUIDE: typeof MONEY_GUIDE !== "undefined" ? MONEY_GUIDE : [], REGIONS: typeof REGIONS !== "undefined" ? REGIONS : {} };
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1482,6 +1638,11 @@ input[type=password],.cardin{width:100%;font:15px var(--sans);padding:9px 10px;b
 .rlink{font-family:var(--mono);font-size:12px;color:var(--sky);background:none;border:none;padding:3px 0 0;cursor:pointer;text-align:left;display:block}
 .rlink:hover{text-decoration:underline}
 .script{border-left:3px solid var(--sun);padding:6px 12px;background:#fffaf0;margin-bottom:8px}
+.mg-banner{background:#fbf3df;border-left:4px solid var(--sun);padding:9px 12px;font-size:13px;margin-bottom:10px;border-radius:4px}.mg-banner p{margin:3px 0}
+.mg-ex{border:1.5px solid var(--ink);padding:9px 12px;background:#fffaf0;margin-bottom:10px;border-radius:4px}.mg-ex h4{margin:0 0 5px;font-family:var(--serif)}
+.mg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}.mg-sec{border:1px solid var(--rule);padding:10px 12px;background:var(--paper);border-radius:4px;break-inside:avoid}
+.mg-sec h4{margin:0 0 4px;font-family:var(--serif);font-size:15.5px}.mg-sec p,.mg-sec li,.mg-ex li{font-size:13px;line-height:1.45}.mg-note{margin-top:6px;padding:7px 9px;border-left:3px solid var(--sky);background:#e7f0f2;font-size:12.5px}
+.er-alert{border:2px solid var(--tomato)!important;background:#fff5f2!important}
 .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}.pcard{border:1px solid var(--rule);padding:7px;border-radius:4px;background:var(--paper)}
 .pcard img{width:100%;height:120px;object-fit:cover;border-radius:3px;cursor:zoom-in}
 #sheetOnly{display:none;max-width:780px;margin:0 auto}.sgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
@@ -1586,7 +1747,7 @@ document.getElementById("uform").onsubmit = async ev => {
 function renderAll(root, S) {
   S.f = S.f || {}; S.lists = S.lists || {}; S.checks = S.checks || {}; S.extra = S.extra || {}; S.customTabs = S.customTabs || []; S.photos = S.photos || [];
   if (!S.lists.call_log) S.lists.call_log = [{}];
-  const reg = (SC.REGIONS && SC.REGIONS[S.region]) || { emergency:"911", fieldOverrides:{}, stepOverrides:{} };
+  const reg = (SC.REGIONS && SC.REGIONS[S.region]) || { emergency:"911", label:"United States", fieldOverrides:{}, stepOverrides:{}, moneyGuide:{} };
   const rf = f => { const ov = reg.fieldOverrides?.[f[0]]; return ov ? [f[0], ov.label ?? f[1], ov.ph ?? f[2], f[3]] : f; };
   const rs = s => { const ov = reg.stepOverrides?.[s.id]; return ov ? { ...s, t: ov.t ?? s.t, d: ov.d ?? s.d } : s; };
   let activeTab = "start", activeTrack = S.track && SC.PLAYBOOK[S.track] ? S.track : "hurt", dirty = false, statusMsg = "";
@@ -1596,6 +1757,14 @@ function renderAll(root, S) {
     const rows = (S.lists[id] || []).filter(r => isRowFilled(id, r));
     if (!rows.length) return "";
     return '<div class="card" data-bid="'+esc(id)+'" data-btitle="'+esc(title)+'"><h3>'+esc(title)+'</h3>'+rows.map(r => '<div class="row"><div class="grid2">'+cols.map(([k,l]) => String(r[k]||"").trim() ? '<div><span class="lbl">'+esc(l)+'</span><div class="val">'+linkify(r[k])+'</div></div>' : "").join("")+'</div></div>').join("")+'</div>';
+  };
+  const moneyGuideHtml = (b) => {
+    const mg = reg.moneyGuide || {}, gs = SC.MONEY_GUIDE || [];
+    if (!gs.length) return "";
+    return '<div class="card" data-bid="'+esc(b.id)+'" data-btitle="'+esc(b.title)+'"><h3>'+esc(b.title)+'</h3>'
+      + '<div class="mg-banner">'+(mg.depositCap?'<p><b>Deposit cap ('+esc(reg.label||"")+'):</b> '+esc(mg.depositCap)+'</p>':"")+(mg.fiduciaryName?'<p><b>Who to hire:</b> '+esc(mg.fiduciaryName)+'</p>':"")+(mg.taxNote?'<p><b>Tax note:</b> '+esc(mg.taxNote)+'</p>':"")+'</div>'
+      + (mg.sampleLines?.length?'<div class="mg-ex"><h4>'+esc(mg.sampleTitle||"Sample Allocation")+'</h4><ul>'+mg.sampleLines.map(l=>'<li>'+esc(l)+'</li>').join("")+'</ul></div>':"")
+      + '<div class="mg-grid">'+gs.map(g=>'<div class="mg-sec"><h4>'+esc(g.title)+'</h4><p>'+esc(g.summary)+'</p><ul>'+(g.bullets||[]).map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul>'+(g.note?'<div class="mg-note">'+esc(g.note)+'</div>':"")+'</div>').join("")+'</div></div>';
   };
   const callLogHtml = () => {
     const b = SC.TABS[0].blocks.find(x => x.id === "call_log");
@@ -1637,6 +1806,10 @@ function renderAll(root, S) {
         else { const mr = (S.lists[x.id]||[]).find(r => Object.values(r).some(v => String(v||"").toLowerCase().includes(term))); if (x.title.toLowerCase().includes(term)||mr) add(t.id,t.label,x.title,mr?Object.values(mr).filter(Boolean).join(" · "):"Table",x.id); }
       });
     });
+    (SC.MONEY_GUIDE || []).forEach(g => {
+      const txt = (g.title+" "+g.summary+" "+(g.bullets||[]).join(" ")+" "+(g.note||"")).toLowerCase();
+      if (txt.includes(term)) add("money","Money Guide",g.title,g.summary,"money_guide");
+    });
     SC.KIDS.forEach(([id,,l]) => { const v = String(S.f[id]||""); if (l.toLowerCase().includes(term)||v.toLowerCase().includes(term)) add("kids","For the kids",l,v,"kids_card"); });
     Object.entries(SC.PLAYBOOK).forEach(([tk,p]) => p.phases.forEach(ph => ph.steps.forEach(raw => { const s = rs(raw); if (s.t.toLowerCase().includes(term)||s.d.toLowerCase().includes(term)) add("start","Playbook",s.t,s.d,s.id,tk); })));
     return out;
@@ -1649,6 +1822,7 @@ function renderAll(root, S) {
       + '<button type="button" class="btn'+(S.largeText?" on":"")+'" id="saLg">A+</button>'
       + '<button type="button" class="btn'+(S.highContrast?" on":"")+'" id="saHc">Contrast</button>'
       + '<button type="button" class="btn" id="saSum">1-page Summary</button>'
+      + '<button type="button" class="btn" id="saMed">ER Grab Sheet</button>'
       + '<button type="button" class="btn" id="saCare">Caregiver sheet</button>'
       + '<button type="button" class="btn" id="dlJson">Download .json</button>'
       + '<button type="button" class="btn primary" id="saveHtml">Save updated copy (.html)</button>'
@@ -1668,6 +1842,7 @@ function renderAll(root, S) {
         (t.blocks || []).forEach(b => {
           if (b.type === "fields") { const fs = b.fields.map(f => rf(f)).map(([id,l]) => fv(l, id)).join(""); if (fs) html += '<div class="card" data-btitle="'+esc(b.title)+'"><h3>'+esc(b.title)+'</h3><div class="grid2">'+fs+'</div></div>'; }
           if (b.type === "list" && b.id !== "call_log") html += listHtml(b.title, b.id, b.cols);
+          if (b.type === "money_guide") html += moneyGuideHtml(b);
           if (b.type === "photos" && S.photos.length) html += '<div class="card" data-bid="visual_refs" data-btitle="Visual reference photos"><h3>'+esc(b.title)+'</h3><div class="pgrid">'+S.photos.map(ph => '<div class="pcard"><img src="'+esc(ph.dataUrl)+'" alt="'+esc(ph.label)+'" onclick="window.open(this.src)"><div style="font-size:12.5px;font-weight:600;margin-top:4px">'+esc(ph.label)+'</div></div>').join("")+'</div></div>';
           if (b.type === "scripts") html += '<div class="card" data-btitle="What to say"><h3>What to say</h3>'+SC.SCRIPTS.map(([st,sb]) => '<div class="script"><b>'+esc(st)+'</b><div><i>'+esc(sb)+'</i></div></div>').join("")+'</div>';
           if (b.type === "letter" && String(S.f.letter||"").trim()) html += '<div class="card" data-btitle="A note to you"><h3>A note to you</h3><div class="val" style="font-family:var(--serif);font-size:17px">'+linkify(S.f.letter)+'</div></div>';
@@ -1689,33 +1864,45 @@ function renderAll(root, S) {
     if (addCall) addCall.onclick = () => { S.lists.call_log.push({}); dirty = true; draw(); };
     root.querySelector("#saLg").onclick = () => { S.largeText = !S.largeText; draw(); };
     root.querySelector("#saHc").onclick = () => { S.highContrast = !S.highContrast; draw(); };
-    root.querySelector("#saSum").onclick = () => {
-      const f = id => String(S.f[id]||"").trim();
-      const rowsOf = id => (S.lists[id]||[]).filter(r => isRowFilled(id,r));
-      document.getElementById("sheetOnly").innerHTML = '<h1>Our Family Field Guide — 1-Page Summary</h1><p style="font-size:13px;color:#444">Updated '+new Date().toLocaleDateString()+'</p><div class="sgrid">'
-        + '<div class="sboxc"><h3>1. Call First &amp; Pros</h3>'+(f("q_first")?'<p><b>Call first:</b> '+esc(f("q_first"))+'</p>':"")+'<ul>'+rowsOf("first").map(r=>'<li><b>'+esc(r.name||r.rel||"Contact")+'</b>: '+esc(r.phone||"")+'</li>').join("")+rowsOf("pros").slice(0,5).map(r=>'<li><b>'+esc(r.role||"Pro")+':</b> '+esc(r.name||"")+' '+esc(r.phone||"")+'</li>').join("")+'</ul></div>'
-        + '<div class="sboxc"><h3>2. Money &amp; Debts</h3>'+(f("m_monthly")?'<p><b>Monthly:</b> '+esc(f("m_monthly"))+'</p>':"")+(f("q_runway")?'<p><b>Runway:</b> '+esc(f("q_runway"))+'</p>':"")+'<ul>'+rowsOf("accounts").map(r=>'<li><b>'+esc(r.inst||r.type)+'</b> ('+esc(r.own||"")+' *'+esc(r.last4||"")+')</li>').join("")+'</ul>'+(rowsOf("debts").length?'<p><b>Debts:</b> '+rowsOf("debts").map(r=>esc(r.type||r.name)+' '+esc(r.bal||"")).join(" · ")+'</p>':"")+'</div>'
-        + '<div class="sboxc full"><h3>3. Insurance &amp; Retirement</h3><ul>'+rowsOf("insurance").map(r=>'<li><b>'+esc(r.type)+':</b> '+[r.co,r.amt,r.benef?"Benef: "+r.benef:"",r.phone].filter(Boolean).map(esc).join(" · ")+'</li>').join("")+'</ul>'+(rowsOf("invest").length?'<p><b>Investments:</b> '+rowsOf("invest").map(r=>esc(r.inst||"")+' '+esc(r.type||"")+(r.benef?' ('+esc(r.benef)+')':"")).join(" · ")+'</p>':"")+'</div>'
-        + '<div class="sboxc"><h3>4. Papers, Phone &amp; Property</h3>'+(f("q_binder")?'<p><b>Papers:</b> '+esc(f("q_binder"))+'</p>':"")+(f("d_will")?'<p><b>Will:</b> '+esc(f("d_will"))+'</p>':"")+(f("d_phone")?'<p><b>Phone:</b> '+esc(f("d_phone"))+'</p>':"")+(rowsOf("property").length?'<p><b>Property:</b> '+rowsOf("property").map(r=>esc(r.what)+(r.where?" ("+esc(r.where)+")":"")).join(" · ")+'</p>':"")+'</div>'
-        + '<div class="sboxc"><h3>5. Home, Kids &amp; Pets</h3>'+(f("k_home")?'<p><b>Address:</b> '+esc(f("k_home"))+'</p>':"")+(f("k_safe")?'<p><b>Safe word:</b> '+esc(f("k_safe"))+'</p>':"")+'<ul>'+rowsOf("kids_info").map(r=>'<li><b>'+esc(r.child)+'</b> '+esc(r.pickup||"")+'</li>').join("")+rowsOf("pets").map(r=>'<li><b>'+esc(r.name)+'</b> '+esc(r.vet||"")+'</li>').join("")+'</ul></div></div>';
+    const showPrintSheet = html => {
+      document.getElementById("sheetOnly").innerHTML = html;
       document.body.classList.add("sheet-mode");
       const donePrint = () => document.body.classList.remove("sheet-mode");
       window.addEventListener("afterprint", donePrint, { once:true });
       setTimeout(() => { window.print(); setTimeout(donePrint, 1200); }, 40);
     };
+    root.querySelector("#saSum").onclick = () => {
+      const f = id => String(S.f[id]||"").trim();
+      const rowsOf = id => (S.lists[id]||[]).filter(r => isRowFilled(id,r));
+      const hasIll = Boolean(f("h_diag")||f("h_triage")||f("h_redflag")||f("h_devices")||f("h_rescue"));
+      showPrintSheet('<h1>Our Family Field Guide — 1-Page Summary</h1><p style="font-size:13px;color:#444">Updated '+new Date().toLocaleDateString()+'</p><div class="sgrid">'
+        + '<div class="sboxc"><h3>1. Call First &amp; Pros</h3>'+(f("q_first")?'<p><b>Call first:</b> '+esc(f("q_first"))+'</p>':"")+'<ul>'+rowsOf("first").map(r=>'<li><b>'+esc(r.name||r.rel||"Contact")+'</b>: '+esc(r.phone||"")+'</li>').join("")+rowsOf("pros").slice(0,5).map(r=>'<li><b>'+esc(r.role||"Pro")+':</b> '+esc(r.name||"")+' '+esc(r.phone||"")+'</li>').join("")+'</ul></div>'
+        + '<div class="sboxc"><h3>2. Money &amp; Debts</h3>'+(f("m_monthly")?'<p><b>Monthly:</b> '+esc(f("m_monthly"))+'</p>':"")+(f("q_runway")?'<p><b>Runway:</b> '+esc(f("q_runway"))+'</p>':"")+(f("m_payout_first")?'<p><b>Payout first step:</b> '+esc(f("m_payout_first"))+'</p>':"")+'<ul>'+rowsOf("accounts").map(r=>'<li><b>'+esc(r.inst||r.type)+'</b> ('+esc(r.own||"")+' *'+esc(r.last4||"")+')</li>').join("")+'</ul>'+(rowsOf("crypto").length?'<p><b>Crypto:</b> '+rowsOf("crypto").map(r=>esc(r.platform||"Wallet")).join(" · ")+'</p>':"")+(rowsOf("debts").length?'<p><b>Debts:</b> '+rowsOf("debts").map(r=>esc(r.type||r.name)+' '+esc(r.bal||"")).join(" · ")+'</p>':"")+'</div>'
+        + '<div class="sboxc full"><h3>3. Insurance &amp; Retirement</h3><ul>'+rowsOf("insurance").map(r=>'<li><b>'+esc(r.type)+':</b> '+[r.co,r.amt,r.benef?"Benef: "+r.benef:"",r.phone].filter(Boolean).map(esc).join(" · ")+'</li>').join("")+'</ul>'+(rowsOf("invest").length?'<p><b>Investments:</b> '+rowsOf("invest").map(r=>esc(r.inst||"")+' '+esc(r.type||"")+(r.benef?' ('+esc(r.benef)+')':"")).join(" · ")+'</p>':"")+'</div>'
+        + '<div class="sboxc"><h3>4. Papers, IDs, Phone &amp; Property</h3>'+(f("q_binder")?'<p><b>Papers:</b> '+esc(f("q_binder"))+'</p>':"")+(f("d_will")?'<p><b>Will:</b> '+esc(f("d_will"))+'</p>':"")+(f("d_phone")?'<p><b>Phone:</b> '+esc(f("d_phone"))+'</p>':"")+(rowsOf("gov_ids").length?'<p><b>Key IDs:</b> '+rowsOf("gov_ids").slice(0,4).map(r=>esc(r.idtype)+(r.last4?" *"+esc(r.last4):"")).join(" · ")+'</p>':"")+(rowsOf("property").length?'<p><b>Property:</b> '+rowsOf("property").map(r=>esc(r.what)+(r.where?" ("+esc(r.where)+")":"")).join(" · ")+'</p>':"")+'</div>'
+        + '<div class="sboxc"><h3>5. Home, Kids &amp; Pets</h3>'+(f("k_home")?'<p><b>Address:</b> '+esc(f("k_home"))+'</p>':"")+(f("k_safe")?'<p><b>Safe word:</b> '+esc(f("k_safe"))+'</p>':"")+'<ul>'+rowsOf("kids_info").map(r=>'<li><b>'+esc(r.child)+'</b> '+esc(r.pickup||"")+'</li>').join("")+rowsOf("pets").map(r=>'<li><b>'+esc(r.name)+'</b> '+esc(r.vet||"")+'</li>').join("")+'</ul></div>'
+        + (hasIll?'<div class="sboxc full er-alert"><h3>6. Active Illness / ER Alert</h3>'+(f("h_diag")?'<p><b>Diagnosis:</b> '+esc(f("h_diag"))+'</p>':"")+(f("h_triage")?'<p><b>Triage / ER:</b> '+esc(f("h_triage"))+'</p>':"")+(f("h_redflag")?'<p><b>Red-flag rule:</b> '+esc(f("h_redflag"))+'</p>':"")+(f("h_devices")?'<p><b>Ports / arm limits:</b> '+esc(f("h_devices"))+'</p>':"")+'</div>':"")
+        + '</div>');
+    };
+    root.querySelector("#saMed").onclick = () => {
+      const f = id => String(S.f[id]||"").trim();
+      const rowsOf = id => (S.lists[id]||[]).filter(r => isRowFilled(id,r));
+      showPrintSheet('<h1>1-Page ER &amp; Medical Treatment Grab Sheet</h1><p style="font-size:13px;color:#444">Emergency #: '+esc(reg.emergency||"911")+' · Updated '+new Date().toLocaleDateString()+'</p><div class="sgrid">'
+        + '<div class="sboxc full er-alert"><h3>Red-Flag Rules &amp; 24/7 Triage</h3><div style="font-size:17px;font-weight:700">'+esc(f("h_triage")||"See specialist phone in Contacts")+'</div>'+(f("h_redflag")?'<p><b>Red-flag rule:</b> '+esc(f("h_redflag"))+'</p>':"")+'</div>'
+        + '<div class="sboxc"><h3>Diagnosis, Protocol &amp; Warnings</h3>'+(f("h_diag")?'<p><b>Diagnosis:</b> '+esc(f("h_diag"))+'</p>':"")+(f("h_devices")?'<p><b>Ports/Implants/Limits:</b> '+esc(f("h_devices"))+'</p>':"")+(f("h_comfort")?'<p><b>Boundaries/Comfort:</b> '+esc(f("h_comfort"))+'</p>':"")+'</div>'
+        + '<div class="sboxc"><h3>Medications &amp; Rescue Kit</h3>'+(f("d_meds")?'<p><b>Meds &amp; allergies:</b> '+esc(f("d_meds"))+'</p>':"")+(f("h_rescue")?'<p><b>Rescue meds:</b> '+esc(f("h_rescue"))+'</p>':"")+(f("h_pharm")?'<p><b>Pharmacy:</b> '+esc(f("h_pharm"))+'</p>':"")+'</div>'
+        + '<div class="sboxc"><h3>Proxy, Portal &amp; Insurance</h3>'+(f("d_mpoa")?'<p><b>Medical POA:</b> '+esc(f("d_mpoa"))+'</p>':"")+(f("h_portal")?'<p><b>Portal proxy:</b> '+esc(f("h_portal"))+'</p>':"")+(f("d_ins")?'<p><b>Insurance:</b> '+esc(f("d_ins"))+'</p>':"")+'</div>'
+        + '<div class="sboxc"><h3>Emergency Contacts</h3><ul>'+rowsOf("first").map(r=>'<li><b>'+esc(r.name||r.rel||"Contact")+'</b>: '+esc(r.phone||"")+'</li>').join("")+'</ul>'+(f("q_first")?'<p>'+esc(f("q_first"))+'</p>':"")+'</div></div>');
+    };
     root.querySelector("#saCare").onclick = () => {
       const f = id => String(S.f[id]||"").trim();
       const rowsOf = id => (S.lists[id]||[]).filter(r => isRowFilled(id,r));
-      document.getElementById("sheetOnly").innerHTML = '<h1>Emergency Caregiver &amp; Fridge Sheet</h1><p style="font-size:13px;color:#444">Updated '+new Date().toLocaleDateString()+'</p><div class="sgrid">'
+      showPrintSheet('<h1>Emergency Caregiver &amp; Fridge Sheet</h1><p style="font-size:13px;color:#444">Updated '+new Date().toLocaleDateString()+'</p><div class="sgrid">'
         + '<div class="sboxc full"><h3>Home Address (read this to '+esc(reg.emergency||"911")+')</h3><div style="font-size:18px;font-weight:700">'+esc(f("k_home")||"Not filled")+'</div>'+(f("k_safe")?'<p><b>Safe word:</b> '+esc(f("k_safe"))+'</p>':"")+'</div>'
         + '<div class="sboxc"><h3>Who to Call First</h3><ul>'+rowsOf("first").map(r=>'<li><b>'+esc(r.name||r.rel||"Contact")+'</b>: '+esc(r.phone||"")+'</li>').join("")+'</ul>'+(f("q_first")?'<p>'+esc(f("q_first"))+'</p>':"")+'</div>'
         + '<div class="sboxc"><h3>Kids &amp; Health</h3><ul>'+rowsOf("kids_info").map(r=>'<li><b>'+esc(r.child||"Child")+'</b> '+esc(r.pickup||"")+' '+esc(r.comfort||"")+'</li>').join("")+rowsOf("fam_health").map(r=>'<li><b>'+esc(r.name||"")+'</b> '+esc(r.allergy||"")+' '+esc(r.meds||"")+'</li>').join("")+'</ul></div>'
         + '<div class="sboxc"><h3>House Shut-offs</h3><ul>'+[["Water",f("hk_water")],["Gas",f("hk_gas")],["Breaker",f("hk_breaker")],["Keys",f("hk_spare")]].filter(([,v])=>v).map(([k,v])=>'<li><b>'+k+':</b> '+esc(v)+'</li>').join("")+'</ul></div>'
-        + '<div class="sboxc"><h3>Pets</h3><ul>'+rowsOf("pets").map(r=>'<li><b>'+esc(r.name||"Pet")+'</b> '+esc(r.food||"")+' '+esc(r.vet||"")+'</li>').join("")+'</ul></div></div>';
-      document.body.classList.add("sheet-mode");
-      const donePrint = () => document.body.classList.remove("sheet-mode");
-      window.addEventListener("afterprint", donePrint, { once:true });
-      setTimeout(() => { window.print(); setTimeout(donePrint, 1200); }, 40);
+        + '<div class="sboxc"><h3>Pets</h3><ul>'+rowsOf("pets").map(r=>'<li><b>'+esc(r.name||"Pet")+'</b> '+esc(r.food||"")+' '+esc(r.vet||"")+'</li>').join("")+'</ul></div></div>');
     };
     root.querySelector("#dlJson").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(pkg)], { type:"application/json" })); a.download = "family-field-guide-backup.json"; a.click(); };
     root.querySelector("#saveHtml").onclick = async () => {

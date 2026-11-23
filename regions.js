@@ -12,8 +12,26 @@ const REGIONS = {
     currency: "$",
     crossBorder: false,
     indiaNotes: false,
+    moneyGuide: {
+      depositCap: "FDIC $250,000 per depositor, per insured bank (joint accounts cover $500,000).",
+      taxNote: "Life insurance death benefits are generally federal income-tax-free (IRC §101), and inherited investments/home usually receive a step-up in cost basis. Talk to a CPA about surviving-spouse tax filing before selling assets.",
+      fiduciaryName: "Fee-Only Fiduciary CFP® (search NAPFA.org or XYPlanningNetwork.com)",
+      safeCash: "2–4 FDIC-insured High-Yield Savings Accounts (under $250k each), Treasury Money Market fund, or short-term U.S. Treasury bills.",
+      sampleTitle: "Sample $1,000,000 Allocation (US)",
+      sampleLines: [
+        "12-month safety cash ($120,000) across FDIC High-Yield Savings accounts.",
+        "Pay off high-interest joint debts only (up to $80,000); pause on low-rate mortgages and verify solo debts with your attorney.",
+        "Near-term 1–5 year buffer ($100,000) in Treasury bills / short-term CDs for kids or home repairs.",
+        "Long-term index portfolio ($700,000) paying ~3.5%–4% ($24,500–$28,000/yr sustainable) before Social Security survivor benefits or salary."
+      ]
+    },
     fieldOverrides: {},
-    listOverrides: {},
+    listOverrides: {
+      gov_ids: {
+        hint: "Safety rule: enter ONLY the last 4 digits of SSNs, Passports, or Driver's Licenses and where the physical card lives. NEVER type full 9-digit SSNs.",
+        extraSuggestions: ["SSN (Child)", "Global Entry / TSA PreCheck", "ITIN / EIN", "Medicare Card"]
+      }
+    },
     stepOverrides: {}
   },
   us_in: {
@@ -22,6 +40,19 @@ const REGIONS = {
     currency: "$ / ₹",
     crossBorder: true,
     indiaNotes: true,
+    moneyGuide: {
+      depositCap: "US FDIC $250,000 per bank · India DICGC ₹5 lakh per bank.",
+      taxNote: "US life insurance payouts are generally income-tax-free, and India Section 10(10D) exempts qualifying policies—HOWEVER, non-US citizens can face a tiny $60,000 US estate-tax threshold on US-situs assets without proper treaties/trusts, and repatriating large India sums has FEMA/LRS & FBAR/FATCA rules. Consult a cross-border CPA before wiring large payouts internationally.",
+      fiduciaryName: "Cross-border Fee-Only Fiduciary CFP® (US) & SEBI-Registered Investment Adviser / RIA (India)",
+      safeCash: "US insured High-Yield Savings / Treasury Money Market (keep under $250k/bank) and India PSU/top-bank FDs split under ₹5L per bank or Liquid Debt funds.",
+      sampleTitle: "Sample $1,000,000 / ₹2 Cr Cross-Border Allocation",
+      sampleLines: [
+        "US 12-month cash cushion ($120,000) + India parents/emergency reserve (₹15–20L) in separate safe liquid accounts.",
+        "Pause before wiring payouts between US and India until your visa status and cross-border tax residency are confirmed.",
+        "Near-term transition / education fund ($130,000) in short-term T-Bills or CDs.",
+        "Long-term global diversified index portfolio ($750,000) yielding ~3.5%–4% ($26k–$30k/yr) to support family stability in either country."
+      ]
+    },
     fieldOverrides: {
       m_monthly: { ph: "e.g. $5,500 US + ₹45,000 India" },
       d_hcd: { label: "US Healthcare directive & India medical notes" },
@@ -33,7 +64,11 @@ const REGIONS = {
       accounts: { hint: "List both US (checking/savings) and India (NRE/NRO/FCNR) accounts. Mark Joint vs. Solo; in India, check Nominee vs. Legal Heir.", extraSuggestions: ["NRE Account", "NRO Account", "FCNR Deposit"] },
       invest: { hint: "US (401k, IRA, HSA, brokerage) & India (EPF, PPF, NPS, Mutual Funds, Demat). Beneficiaries/nominees matter—separate US & India wills prevent probate delays.", extraSuggestions: ["EPF / VPF", "PPF", "NPS", "Mutual Funds / Demat", "Sovereign Gold Bonds"] },
       property: { extraSuggestions: ["India Property / Flat", "Gold / Bank Locker"] },
-      doclocs: { hint: "Include I-797, I-94, I-140/I-485, EAD, Passports, OCI cards, PAN, Aadhaar, and both US & India Wills.", extraSuggestions: ["PAN Card", "Aadhaar Card", "OCI Card", "I-797 / I-94 / I-140", "India Property Sale Deed"] }
+      doclocs: { hint: "Include I-797, I-94, I-140/I-485, EAD, Passports, OCI cards, PAN, Aadhaar, and both US & India Wills.", extraSuggestions: ["PAN Card", "Aadhaar Card", "OCI Card", "I-797 / I-94 / I-140", "India Property Sale Deed"] },
+      gov_ids: {
+        hint: "Safety rule: enter ONLY the last 4 digits of SSN, Aadhaar, PAN, Passport, or USCIS/I-94 numbers and where originals live. Never type full SSN or 12-digit Aadhaar numbers.",
+        extraSuggestions: ["PAN Card (last 4 + location)", "Aadhaar Card (last 4 ONLY)", "OCI Card", "USCIS / A-Number (last 4)", "Passport (Spouse / Child)", "UAN (EPFO)"]
+      }
     },
     stepOverrides: {
       g9: { d: "Contact US Social Security (1-800-772-1213) for survivor benefits, and contact the Indian Embassy/Consulate for death registration, OCI/passport cancellation, or repatriation support." },
@@ -47,6 +82,19 @@ const REGIONS = {
     currency: "₹",
     crossBorder: false,
     indiaNotes: true,
+    moneyGuide: {
+      depositCap: "₹5 lakh per depositor, per bank (including principal & interest) under DICGC.",
+      taxNote: "Life insurance proceeds are generally exempt under Section 10(10D). Nominees receive funds as custodians—legal heirs/will determine final ownership, so keep the will and bank/demat transmission papers handy.",
+      fiduciaryName: "SEBI-Registered Investment Adviser (RIA — fee-only). Strictly avoid bank RMs pitching ULIPs, endowment plans, or NFOs.",
+      safeCash: "PSU / top-tier bank Fixed Deposits split across several banks (under ₹5L per bank), Post Office schemes, or Liquid / Overnight Mutual Funds.",
+      sampleTitle: "Sample ₹2 Crore Allocation (India)",
+      sampleLines: [
+        "12-month household reserve (₹20–25 lakh) across safe bank FDs / Liquid Funds.",
+        "Clear high-interest personal/credit-card loans first; consult your CA before prepaying a subsidized home loan.",
+        "Near-term 1–5 year goals (₹30–40 lakh) in short-duration Debt Funds or staggered FDs for tuition and family milestones.",
+        "Long-term diversified portfolio (₹1.25–1.35 Cr in broad index/hybrid funds) supporting ~3.5%–4% annual withdrawal (₹4.5–5.4L/yr sustainable) before pension or salary."
+      ]
+    },
     fieldOverrides: {
       m_monthly: { ph: "e.g. about ₹1,20,000 / month" },
       m_runway: { ph: "e.g. ₹8,00,000 ≈ 6 months" },
@@ -60,7 +108,11 @@ const REGIONS = {
       accounts: { hint: "Mark Joint (Either or Survivor) vs. Single, and verify the registered Nominee (note: a bank nominee is a custodian; legal heirs/will govern final ownership).", extraSuggestions: ["NRE / NRO Account", "Fixed Deposit (FD)", "PPF Account"] },
       invest: { hint: "EPF, PPF, NPS, Mutual Funds, Demat, Fixed Deposits, Sovereign Gold Bonds. Verify registered Nominees & legal will.", extraSuggestions: ["EPF / VPF", "PPF", "NPS", "Mutual Funds / Demat", "Sovereign Gold Bonds"] },
       property: { extraSuggestions: ["Gold / Bank Locker", "Ancestral Property"] },
-      doclocs: { hint: "Include PAN card, Aadhaar card, Passports, Property sale deed, Demat/Share details, and latest ITRs.", extraSuggestions: ["PAN Card", "Aadhaar Card", "Property Sale Deed", "Demat / Share Certificates", "Ration / Voter ID"] }
+      doclocs: { hint: "Include PAN card, Aadhaar card, Passports, Property sale deed, Demat/Share details, and latest ITRs.", extraSuggestions: ["PAN Card", "Aadhaar Card", "Property Sale Deed", "Demat / Share Certificates", "Ration / Voter ID"] },
+      gov_ids: {
+        hint: "Safety rule: enter ONLY the last 4 characters/digits of Aadhaar, PAN, Passport, or UAN and where the original card lives. NEVER type full 12-digit Aadhaar or full PAN numbers.",
+        extraSuggestions: ["PAN Card (last 4 + location)", "Aadhaar Card (last 4 ONLY)", "UAN (EPFO)", "ABHA Health ID", "Voter ID"]
+      }
     },
     stepOverrides: {
       h1: { d: "Call 112 (or 100/102/108) if anyone is in danger. It's okay to let someone else drive or make calls for you." },
@@ -78,13 +130,30 @@ const REGIONS = {
     currency: "$ / € / £",
     crossBorder: true,
     indiaNotes: false,
+    moneyGuide: {
+      depositCap: "Check bank deposit insurance in BOTH countries (e.g., US $250k FDIC, UK £85k FSCS, EU €100k DGS, India ₹5L DICGC).",
+      taxNote: "Cross-border payouts can trigger currency, reporting, or estate-tax rules depending on domicile and citizenship. Consult a cross-border tax advisor before transferring large sums across borders.",
+      fiduciaryName: "Cross-border Fee-Only Fiduciary Advisor familiar with both countries' tax treaties",
+      safeCash: "Keep short-term living expenses in the host country's insured high-yield cash account while residency status is settled.",
+      sampleTitle: "Sample Cross-Border Allocation",
+      sampleLines: [
+        "Keep 12 months of living costs in the currency where you are currently paying bills.",
+        "Pause international wire transfers until an immigration & tax specialist confirms your best long-term country of residence.",
+        "Hold 1–5 year repatriation/education cash in short-term insured government bills or fixed deposits.",
+        "Invest the remaining long-term core (60%–75%) in globally diversified, tax-treaty-friendly low-cost funds."
+      ]
+    },
     fieldOverrides: {
       d_will: { label: "Host-country & Home-country Wills: where originals are" },
       d_guard: { label: "Local temporary guardian & permanent guardian" }
     },
     listOverrides: {
       accounts: { hint: "List both host-country and home-country bank accounts. Mark Joint vs. Solo." },
-      doclocs: { hint: "Include visas/residence permits, work permits, passports, birth/marriage certificates (apostilled), and both country wills." }
+      doclocs: { hint: "Include visas/residence permits, work permits, passports, birth/marriage certificates (apostilled), and both country wills." },
+      gov_ids: {
+        hint: "Safety rule: enter ONLY the last 4 digits/characters of national IDs, tax IDs, passports, and visa/residence permit numbers.",
+        extraSuggestions: ["Residence Permit / Visa (last 4)", "Home-Country National ID (last 4)", "Tax ID (Host & Home)"]
+      }
     },
     stepOverrides: {
       h1: { d: "Call local emergency services (911 / 112 / 999) if anyone is in danger." },
@@ -100,6 +169,19 @@ const REGIONS = {
     currency: "£",
     crossBorder: false,
     indiaNotes: false,
+    moneyGuide: {
+      depositCap: "FSCS £85,000 per banking group (Temporary High Balance protection up to £1M for 6 months after a life insurance payout).",
+      taxNote: "Life policies written 'in trust' usually pay out quickly outside probate and Inheritance Tax (IHT). Ask a solicitor/accountant before moving trust proceeds.",
+      fiduciaryName: "Chartered Independent Financial Adviser (IFA — fee-based, whole of market, CII/PFS verified)",
+      safeCash: "NS&I Premium Bonds / Direct Saver (100% HM Treasury backed) or multiple FSCS-protected Easy Access savings accounts.",
+      sampleTitle: "Sample £500,000 Allocation (UK)",
+      sampleLines: [
+        "12-month emergency cash (£50,000) in NS&I or FSCS Easy Access savings.",
+        "Clear expensive joint credit/car finance (£25,000–£50,000); review mortgage rate before overpaying.",
+        "Near-term 1–5 year buffer (£75,000) in Cash ISAs / short-dated Gilts.",
+        "Long-term diversified core (£350,000 across Stocks & Shares ISAs/GIA) yielding ~3.5%–4% (£12,250–£14,000/yr) alongside pension/survivor benefits."
+      ]
+    },
     fieldOverrides: {
       m_monthly: { ph: "e.g. about £4,200 / month" },
       w_hsa: { label: "Private health / dental / cash plan" },
@@ -109,7 +191,11 @@ const REGIONS = {
     },
     listOverrides: {
       invest: { hint: "Workplace pensions, SIPP, Stocks & Shares ISA, LISA, Premium Bonds. Check Expression of Wishes forms.", extraSuggestions: ["Stocks & Shares ISA", "SIPP", "Workplace Pension", "Premium Bonds"] },
-      doclocs: { hint: "Include Passports, Birth/Marriage certificates, NI numbers, Property title deeds, and LPA documents.", extraSuggestions: ["National Insurance #", "LPA Documents"] }
+      doclocs: { hint: "Include Passports, Birth/Marriage certificates, NI numbers, Property title deeds, and LPA documents.", extraSuggestions: ["National Insurance #", "LPA Documents"] },
+      gov_ids: {
+        hint: "Safety rule: enter ONLY the last 4 characters/digits of National Insurance, NHS, or Passport numbers and where the original lives.",
+        extraSuggestions: ["National Insurance # (last 4)", "NHS Number (last 4)", "HMRC UTR"]
+      }
     },
     stepOverrides: {
       h1: { d: "Call 999 if anyone is in danger. It's okay to let someone else drive or make calls for you." },
@@ -127,6 +213,19 @@ const REGIONS = {
     currency: "CA$",
     crossBorder: false,
     indiaNotes: false,
+    moneyGuide: {
+      depositCap: "CDIC CA$100,000 per insured category, per member institution.",
+      taxNote: "Life insurance proceeds to named beneficiaries are generally tax-free and bypass probate in Canada. RRSP/TFSA transfers to a spouse can often roll over tax-deferred—speak to an accountant first.",
+      fiduciaryName: "Advice-Only / Fee-Only CFP® (look for directories with zero product sales)",
+      safeCash: "High-Interest Savings Accounts across multiple CDIC-insured banks or Government of Canada T-Bills / GICs.",
+      sampleTitle: "Sample CA$1,000,000 Allocation (Canada)",
+      sampleLines: [
+        "12-month safety reserve (CA$100,000) across CDIC-insured High-Interest Savings.",
+        "Clear high-interest joint debts first; compare mortgage renewal rate before lump-sum prepayment.",
+        "Near-term 1–5 year needs (CA$120,000) in GIC ladder or T-Bills (maximizing TFSA/RESP room first).",
+        "Long-term diversified portfolio (CA$780,000) generating ~3.5%–4% (CA$27k–CA$31k/yr) alongside CPP survivor benefits."
+      ]
+    },
     fieldOverrides: {
       w_hsa: { label: "Extended health / HSA / group benefits" },
       d_hcd: { label: "Personal / Healthcare Directive & Representation Agreement" },
@@ -134,7 +233,11 @@ const REGIONS = {
     },
     listOverrides: {
       invest: { hint: "RRSP, TFSA, RESP, FHSA, LIRA, non-registered accounts. Verify designated beneficiaries.", extraSuggestions: ["RRSP", "TFSA", "RESP", "FHSA"] },
-      doclocs: { hint: "Include SIN cards, Passports, Birth/Marriage certificates, Provincial health cards, and NOAs (CRA).", extraSuggestions: ["SIN Card", "CRA Notice of Assessment"] }
+      doclocs: { hint: "Include SIN cards, Passports, Birth/Marriage certificates, Provincial health cards, and NOAs (CRA).", extraSuggestions: ["SIN Card", "CRA Notice of Assessment"] },
+      gov_ids: {
+        hint: "Safety rule: enter ONLY the last 4 digits of SIN, Passport, or Provincial Health cards and where the card lives. Never type full 9-digit SINs.",
+        extraSuggestions: ["SIN (last 4 ONLY)", "Provincial Health Card (last 4)", "PR Card / Citizenship"]
+      }
     },
     stepOverrides: {
       h4: { d: "Ask HR about short-term disability, EI sickness benefits, and salary continuation." },
@@ -150,6 +253,19 @@ const REGIONS = {
     currency: "A$",
     crossBorder: false,
     indiaNotes: false,
+    moneyGuide: {
+      depositCap: "Financial Claims Scheme (FCS): A$250,000 per account holder, per Authorised Deposit-taking Institution (ADI).",
+      taxNote: "Life insurance payouts are generally tax-free, though life/TPD insurance paid out through Superannuation can have different tax rules for adult non-dependents—check with a tax accountant.",
+      fiduciaryName: "Independent Fee-Only Financial Adviser (check ASIC Financial Advisers Register — strictly zero commissions)",
+      safeCash: "High-Interest Savings or Term Deposits split under A$250k per Australian ADI bank (or mortgage offset account if appropriate).",
+      sampleTitle: "Sample A$1,000,000 Allocation (Australia)",
+      sampleLines: [
+        "12-month emergency cash (A$120,000) under A$250k ADI cap.",
+        "Pay high-interest joint credit/personal debt; check mortgage offset benefit vs. paying down.",
+        "Near-term 1–5 year buffer (A$130,000) in short-term Deposits / high-grade bonds.",
+        "Long-term diversified portfolio (A$750,000 across Super/ETF core) providing ~3.5%–4% (A$26k–A$30k/yr sustainable)."
+      ]
+    },
     fieldOverrides: {
       w_hsa: { label: "Private hospital / extras cover" },
       d_hcd: { label: "Advance Care Directive & Enduring Guardian" },
@@ -157,7 +273,11 @@ const REGIONS = {
     },
     listOverrides: {
       invest: { hint: "Superannuation funds, SMSF, shares/ETFs. Check whether Super has a Binding Death Benefit Nomination (super sits outside the will!).", extraSuggestions: ["Superannuation", "SMSF", "Shares / ETFs"] },
-      doclocs: { hint: "Include Passports, Birth/Marriage certificates, TFN, Medicare card, Super statements, and Title deeds.", extraSuggestions: ["TFN / Medicare Card", "Super Binding Nomination"] }
+      doclocs: { hint: "Include Passports, Birth/Marriage certificates, TFN, Medicare card, Super statements, and Title deeds.", extraSuggestions: ["TFN / Medicare Card", "Super Binding Nomination"] },
+      gov_ids: {
+        hint: "Safety rule: enter ONLY the last 4 digits of TFN, Medicare, or Passport numbers and where the card lives.",
+        extraSuggestions: ["TFN (last 4 ONLY)", "Medicare Card (last 4)", "Centrelink CRN (last 4)"]
+      }
     },
     stepOverrides: {
       h1: { d: "Call 000 if anyone is in danger. It's okay to let someone else drive or make calls for you." },
@@ -174,12 +294,29 @@ const REGIONS = {
     currency: "€",
     crossBorder: false,
     indiaNotes: false,
+    moneyGuide: {
+      depositCap: "EU Deposit Guarantee Scheme (DGS): €100,000 per depositor, per bank (many EU states offer temporary higher limits after insurance payouts).",
+      taxNote: "Inheritance tax and forced-heirship rules vary widely across EU countries. Speak with a local notary / tax lawyer before distributing payouts or signing estate papers.",
+      fiduciaryName: "Fee-Only Independent Fiduciary Financial Planner (no bank sales commissions)",
+      safeCash: "High-grade government money market / short-term EU sovereign bills or savings split under €100k per bank.",
+      sampleTitle: "Sample €500,000 Allocation (EU)",
+      sampleLines: [
+        "12-month emergency cushion (€60,000) under €100k DGS bank limits.",
+        "Pay off expensive consumer loans; keep low-rate fixed mortgages unless advised otherwise.",
+        "Near-term 1–5 year goals (€70,000) in short-term deposits or sovereign bills.",
+        "Long-term global diversified ETF core (€370,000) yielding ~3.5%–4% (€13k–€15k/yr) alongside state survivor pensions."
+      ]
+    },
     fieldOverrides: {
       w_hsa: { label: "Supplemental health insurance" },
       k_911: { label: "If someone is hurt", ph: "Call 112. Say your name, our address, and what happened." }
     },
     listOverrides: {
-      invest: { hint: "State/occupational pensions, brokerage, savings. Check inheritance/forced-heirship rules in your country." }
+      invest: { hint: "State/occupational pensions, brokerage, savings. Check inheritance/forced-heirship rules in your country." },
+      gov_ids: {
+        hint: "Safety rule: enter ONLY the last 4 digits of National ID, Tax ID, or Passports and where the physical card lives.",
+        extraSuggestions: ["National ID Card (last 4)", "Tax ID / BSN / Steuer-ID (last 4)", "EU Health Insurance Card (EHIC)"]
+      }
     },
     stepOverrides: {
       h1: { d: "Call 112 if anyone is in danger. It's okay to let someone else drive or make calls for you." },
@@ -197,11 +334,29 @@ const REGIONS = {
     currency: "$",
     crossBorder: false,
     indiaNotes: false,
+    moneyGuide: {
+      depositCap: "Check your country's national bank deposit-insurance cap and split large payouts across multiple strong institutions.",
+      taxNote: "Confirm local inheritance/tax rules with a qualified accountant or estate lawyer before making large transfers or selling inherited property.",
+      fiduciaryName: "Fee-Only Independent Fiduciary Advisor (paid flat/hourly, zero product commissions)",
+      safeCash: "Government-insured savings accounts (under local cap) or short-term sovereign treasury bills while pausing major decisions.",
+      sampleTitle: "Sample $1,000,000 Allocation (General)",
+      sampleLines: [
+        "12-month emergency cash (10%–15% / $100k–$150k) in insured liquid savings.",
+        "High-interest joint debt payoff only (0%–10%); review mortgage/solo debt with your lawyer first.",
+        "Near-term 1–5 year needs (10%–15% / $100k–$150k) in short-term government bills or deposits.",
+        "Long-term diversified portfolio (60%–75% / $600k–$750k) using a ~3.5%–4% annual withdrawal guide ($24k–$30k/yr sustainable)."
+      ]
+    },
     fieldOverrides: {
       w_hsa: { label: "Health savings / medical benefits" },
       k_911: { label: "If someone is hurt", ph: "Call local emergency services. Say your name, our address, and what happened." }
     },
-    listOverrides: {},
+    listOverrides: {
+      gov_ids: {
+        hint: "Safety rule: enter ONLY the last 4 digits of National IDs, Tax IDs, or Passports and where the physical card lives.",
+        extraSuggestions: ["National ID (last 4)", "Tax ID (last 4)"]
+      }
+    },
     stepOverrides: {
       h1: { d: "Call local emergency services if anyone is in danger. Let someone else drive or make calls for you." },
       h4: { d: "Ask about paid sick leave, disability benefits, and salary continuation." },
@@ -229,6 +384,10 @@ const DEMO_FAMILIES = {
       m_tax: "Accountant portal (CPA Raj) + Google Drive 'Tax Archive' folder",
       m_income: "Rohan salary (CloudCorp H-1B) + Priya part-time consulting (EAD)",
       m_first: "Keep Chase Joint Checking funded from Ally HYSA; DO NOT move India NRE funds before talking to Meera Patel.",
+      m_payout_first: "Split payout across 3–4 FDIC High-Yield Savings accounts ($250k max each) + wait 6–12 months before moving house or wiring large sums to India.",
+      m_payout_payoff: "Pay off car loan only; keep mortgage unless CPA recommends; ask Meera Patel about non-citizen estate tax before investing.",
+      m_payout_advisor: "Call our Fee-Only Fiduciary CFP (NOT bank relationship managers or insurance salespeople pitching annuities/ULIPs).",
+      m_payout_monthly: "Auto-transfer $5,600/month on the 1st from Ally HYSA to Chase Joint Checking.",
       w_employer: "CloudCorp · benefits.cloudcorp.example (HR: hr@cloudcorp.example)",
       w_life: "$500,000 (MetLife group term — Beneficiary: Priya)",
       w_disab: "60% salary STD/LTD via MetLife",
@@ -239,6 +398,8 @@ const DEMO_FAMILIES = {
       d_ins: "Premera Blue Cross · Member ID in Apple Wallet & safe",
       h_pharm: "Walgreens on 148th Ave NE",
       d_meds: "No daily meds. Allergic to Penicillin.",
+      h_triage: "Overlake Medical Center (Bellevue) · 425-688-5000",
+      h_portal: "Priya has MyChart proxy access for Rohan & Aarav",
       h_wishes: "Please follow my healthcare directive; prioritize comfort.",
       d_will: "US Will & Trust: Blue safe (original). Separate India Will: parents' locker in Pune + scanned copy in safe.",
       d_exec: "Priya (US) · Brother Vikram (India)",
@@ -290,6 +451,9 @@ const DEMO_FAMILIES = {
         { inst: "Fidelity", type: "401(k)", benef: "Priya (100%)", last4: "3310" },
         { inst: "ICICI Direct", type: "Demat / MF", benef: "Nominee: Priya", last4: "8820" }
       ],
+      crypto: [
+        { platform: "Ledger Nano X + Coinbase", assets: "~0.25 BTC (long-term hold)", access: "Ledger device in blue safe; sealed 24-word metal plate in Pune locker + PIN in 1Password", helper: "Tech friend Arjun Verma (206-555-0139)" }
+      ],
       insurance: [
         { type: "Life (work)", co: "MetLife", amt: "$500,000", benef: "Priya", pol: "9102", phone: "800-638-5433", renew: "Employer" },
         { type: "Life (personal)", co: "Banner Life", amt: "$700,000", benef: "Priya", pol: "4418", phone: "800-638-8428", renew: "Oct" },
@@ -305,6 +469,10 @@ const DEMO_FAMILIES = {
       doclocs: [
         { doc: "Passports, I-797, I-140, OCI cards", where: "Blue fireproof safe (folder #1)", orig: "Originals" },
         { doc: "PAN, Aadhaar & India Will copy", where: "Blue fireproof safe (folder #2)", orig: "Copies + Pune locker" }
+      ],
+      gov_ids: [
+        { who: "Rohan", idtype: "SSN / National ID (Me)", last4: "4812", where: "Card in blue safe + 1Password", exp: "US SSN" },
+        { who: "Rohan", idtype: "PAN / Aadhaar (India)", last4: "9034", where: "Blue safe folder #2 + DigiLocker", exp: "India tax/KYC" }
       ],
       kids_info: [
         { child: "Aarav (7)", school: "Cedar Elementary", teacher: "Ms. Brooks · 425-555-0115", pickup: "Priya, Rohan, Sam Ortiz, Ananya", comfort: "Stuffed elephant Ellie + bedtime audiobooks" }
@@ -343,8 +511,13 @@ const DEMO_FAMILIES = {
       m_cash: "500 in hall closet lockbox",
       m_tax: "Accountant portal + filing cabinet drawer 2",
       m_first: "Keep joint checking funded from savings so mortgage/rent and utilities clear smoothly.",
+      m_payout_first: "Split life insurance payout across 3 FDIC High-Yield Savings accounts ($250k max each) and wait 6–12 months before any big purchases or selling the house.",
+      m_payout_payoff: "Pay off high-interest cards or auto loan; pause before paying off a low-rate mortgage.",
+      m_payout_advisor: "Hire ONLY a Fee-Only Fiduciary CFP® (paid flat/hourly, zero commissions). Say no to annuities or whole life pitches.",
+      m_payout_monthly: "Auto-transfer $4,800/month on the 1st from High-Yield Savings to Joint Checking.",
       d_hcd: "Signed copy in lockbox + saved on primary doctor's portal",
       d_mpoa: "Alex (primary), Jordan Lee (backup)",
+      h_portal: "Alex has MyChart proxy access for family records",
       d_will: "Original signed will is in the hall closet lockbox",
       d_exec: "Alex (primary)",
       d_fpoa: "Durable Financial POA in lockbox",
@@ -375,6 +548,12 @@ const DEMO_FAMILIES = {
       ],
       invest: [
         { inst: "Vanguard", type: "Retirement", benef: "Spouse (100%)", last4: "5520" }
+      ],
+      crypto: [
+        { platform: "Ledger Hardware Wallet", assets: "~0.1 BTC", access: "Device + metal backup sheet inside hall closet lockbox (PIN in Bitwarden)", helper: "Jordan Lee (555-0142) knows steps" }
+      ],
+      gov_ids: [
+        { who: "Me", idtype: "SSN / National ID (Me)", last4: "6719", where: "Card in hall closet lockbox", exp: "Never type full SSN" }
       ],
       insurance: [
         { type: "Life (personal)", co: "TermCo", amt: "750,000", benef: "Spouse", pol: "6012", phone: "555-0170", renew: "Nov" }

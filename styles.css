@@ -297,8 +297,31 @@ body.high-contrast .card,body.high-contrast dialog{border-width:2px;box-shadow:n
 body.high-contrast input,body.high-contrast textarea,body.high-contrast select{border-bottom-width:2px}
 body.high-contrast :focus-visible{outline:3px solid var(--tomato);outline-offset:2px}
 
+.mguide{margin-top:6px}
+.mg-banner{background:#fbf3df;border-left:4px solid var(--sun);border-radius:4px;padding:10px 13px;font-size:13.5px;color:var(--ink);margin-bottom:12px}
+.mg-banner p{margin:4px 0}
+.mg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:720px){.mg-grid{grid-template-columns:minmax(0,1fr)}}
+.mg-sec{border:1px solid var(--rule);border-radius:4px;padding:11px 13px;background:var(--paper);break-inside:avoid}
+.mg-sec-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px}
+.mg-sec-h h4{font-family:var(--serif);font-size:16px;margin:0;color:var(--ink)}
+.mg-badge{font-family:var(--mono);font-size:10.5px;color:var(--sky);text-transform:uppercase;flex-shrink:0}
+.mg-sec p{margin:4px 0;font-size:13px;color:var(--ink2);line-height:1.45}
+.mg-sec ul{margin:6px 0 2px;padding-left:18px;font-size:13px;line-height:1.45}
+.mg-sec li{margin:3px 0}
+.mg-note{margin-top:8px;padding:8px 10px;border-left:3px solid var(--sky);background:#e7f0f2;font-size:12.5px;color:var(--ink);border-radius:3px}
+.mg-ex{border:1.5px solid var(--ink);border-radius:4px;padding:10px 13px;background:#fffaf0;margin-bottom:12px;break-inside:avoid}
+.mg-ex h4{font-family:var(--serif);font-size:15.5px;margin:0 0 6px}
+.mg-ex ul{margin:0;padding-left:18px;font-size:13px;line-height:1.45}
+.mg-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.er-alert{border:2px solid var(--tomato)!important;background:#fff5f2!important}
+.er-alert h3{color:#8c2108;border-bottom-color:#f0b8a8!important}
+body.large-text .mg-sec p,body.large-text .mg-sec li,body.large-text .mg-ex li,body.large-text .mg-banner{font-size:15.5px}
+body.high-contrast .mg-sec,body.high-contrast .mg-ex{border-width:2px}
+body.high-contrast .mg-note{background:#eef4f6;border-left-width:4px}
+
 @media print{
-  nav.tabs,.add,.row .x,.card .cx,.privacy,.track,.tprog,.toast,dialog,.extend,.meter .rev button,.searchbar,.mode-banner,.essentials,.ess-show,.backup-warn,.audit-pill,.demo-banner,.photo-bar{display:none!important}
+  nav.tabs,.add,.row .x,.card .cx,.privacy,.track,.tprog,.toast,dialog,.extend,.meter .rev button,.searchbar,.mode-banner,.essentials,.ess-show,.backup-warn,.audit-pill,.demo-banner,.photo-bar,.mg-acts{display:none!important}
   section.panel{display:block!important;break-before:page;padding-top:0}
   section.panel:first-of-type{break-before:auto}
   .card,.row,.step,.k{break-inside:avoid;box-shadow:none}
