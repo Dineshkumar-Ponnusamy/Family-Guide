@@ -1,0 +1,6 @@
+# Never commit your family's details
+family-field-guide-*.json
+family-field-guide-*.html
+family-guide-*.json
+*.backup.json
+.DS_Store

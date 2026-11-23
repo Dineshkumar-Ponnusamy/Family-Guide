@@ -23,11 +23,17 @@
   <div class="privacy">🔒 <b>Your details stay on this device.</b> Nothing you type is sent anywhere; it saves in this browser automatically. Never type actual passwords or full account numbers here: write <i>where to find</i> them (your password manager, the safe) and the last 4 digits only. Use <b>Save backup</b> to make a passphrase‑locked copy your spouse can open on their own device. The code you put on GitHub never contains your family's details.</div>
 
   <nav class="tabs" id="tabs"></nav>
+  <div class="searchbar" id="searchbar">
+    <input type="search" id="searchIn" placeholder="Search guide… (press /)" aria-label="Search guide" autocomplete="off">
+    <div class="search-res" id="searchRes" hidden></div>
+  </div>
+  <div id="modeBanner"></div>
   <main id="panels"></main>
 </div>
 
+<div id="printSheet" class="print-only" aria-hidden="true"></div>
 <dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
-<input type="file" id="fileIn" accept=".json,application/json" hidden>
+<input type="file" id="fileIn" accept=".json,.html,application/json,text/html" hidden>
 <div class="toast" id="toast"></div>
 
 <script src="schema.js"></script>

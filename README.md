@@ -7,11 +7,20 @@ It's plain HTML, CSS and JavaScript: no build step, no server, no accounts, no t
 ## Your data never goes in this repo
 
 - Answers save only in the browser you type them in (`localStorage`).
-- **Save backup** makes a file locked with a passphrase (AES‑256‑GCM, key derived with PBKDF2 using 250,000 rounds). Share the file and passphrase with your spouse separately.
-- `.gitignore` blocks backup files (`family-guide-*.json`) so they can't be committed by accident.
+- **Save backup** creates either a **standalone locked HTML file** (`.html`, opens offline in any browser with just your passphrase) or an **encrypted JSON file** (`.json`), locked with AES‑256‑GCM (PBKDF2, 250,000 rounds). Share the file and passphrase with your spouse separately.
+- `.gitignore` blocks backup files (`family-field-guide-*.json`, `family-field-guide-*.html`, `family-guide-*.json`) so they can't be committed by accident.
 - Never type passwords or full account numbers. Write where to find them, plus the last 4 digits.
 
 Use a **private** repository anyway. Your section names alone can reveal things about your family.
+
+## Features
+
+- **Edit & Read modes:** Switch to **Read mode** so a stressed reader can tap phone numbers/links, check off playbook steps, and log calls without accidentally editing or seeing empty boxes.
+- **Playbooks & Call Log:** Step-by-step action plans for hospital/incapacitation, death, money emergencies, and unreachable parents (caregiver), with clickable cross-links and a built-in **Call & claim log**.
+- **15-Minute Essentials & Search:** Jump straight to the 10 highest-impact items, or press `/` to search across every field, table, and playbook step.
+- **Modular Section Templates:** One-click templates under **+ Section** for Smart Home & Wi‑Fi, Crypto/Domains/Homelab, Small Business, Traveling/Caregiver, International/Expat Assets, and Aging Parents.
+- **Flexible Printing:** Print the full guide (with or without empty blanks), a **1-page Caregiver / Fridge Sheet**, or a **1-page Break-Glass Cover Sheet** for your safe.
+- **Check-Up Reminders:** Export a recurring 6-month `.ics` calendar reminder next to **Mark reviewed**.
 
 ## Run it
 
