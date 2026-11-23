@@ -47,8 +47,14 @@ function getRegion() {
     sampleTitle: "Sample $1,000,000 Allocation",
     sampleLines: []
   };
+  const defPf = {
+    legal: "National or Regional Bar Association Referral Service & Legal Aid",
+    visa: "Licensed Independent Immigration Attorney + Home-Country Embassy",
+    money: "Hourly or Flat-Fee Fiduciary Financial Advisor (zero commissions)",
+    tax: "Licensed CPA / Chartered Accountant · Employer EAP & Hospital Social Worker (free)"
+  };
   const r = (typeof REGIONS !== "undefined" && REGIONS[S.region]) ? REGIONS[S.region] : { label: "United States", emergency: "911", currency: "$", crossBorder: false, indiaNotes: false, fieldOverrides: {}, listOverrides: {}, stepOverrides: {} };
-  return { ...r, moneyGuide: r.moneyGuide || defMg };
+  return { ...r, moneyGuide: r.moneyGuide || defMg, proFinder: r.proFinder || defPf };
 }
 function rField(f) {
   const ov = getRegion().fieldOverrides?.[f[0]];
@@ -313,6 +319,33 @@ function renderMoneyGuideHtml(forPrint = false) {
   </div>`;
 }
 
+function renderProFinderHtml(forPrint = false) {
+  const pf = getRegion().proFinder || {};
+  const cards = (typeof PRO_FINDER !== "undefined" && Array.isArray(PRO_FINDER)) ? PRO_FINDER : [];
+  const inner = `<div class="mguide">
+    <div class="mg-banner">
+      <p><b>Quick directories (${esc(getRegion().label)}):</b></p>
+      ${pf.legal ? `<p><b>Legal / Estate:</b> ${esc(pf.legal)}</p>` : ""}
+      ${pf.visa ? `<p><b>Immigration / Visa:</b> ${esc(pf.visa)}</p>` : ""}
+      ${pf.money ? `<p><b>Financial Advisor:</b> ${esc(pf.money)}</p>` : ""}
+      ${pf.tax ? `<p><b>Taxes &amp; Free Aid:</b> ${esc(pf.tax)}</p>` : ""}
+    </div>
+    <div class="mg-grid">${cards.map(c => `<div class="mg-sec">
+      <div class="mg-sec-h"><h4>${esc(c.title)}</h4><span class="mg-badge">${esc(c.badge || "")}</span></div>
+      <p>${esc(c.summary)}</p>
+      <ul>${(c.bullets || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+      ${c.note ? `<div class="mg-note">${esc(c.note)}</div>` : ""}
+    </div>`).join("")}</div>
+    ${!forPrint ? `<div class="mg-acts"><button type="button" class="btn" data-act="printProFinder">Print Finding Help Guide</button></div>` : ""}
+  </div>`;
+  if (!forPrint) return inner;
+  return `<div class="sheet">
+    <h1>How to Find Vetted &amp; Low-Cost Professional Help</h1>
+    <p class="sheet-sub">${esc(getRegion().label)} · Updated ${new Date().toLocaleDateString()} · General directory guidance, not legal, tax, or financial advice.</p>
+    ${inner}
+  </div>`;
+}
+
 function block(b) {
   switch (b.type) {
     case "fields": {
@@ -337,6 +370,11 @@ function block(b) {
       const colKey = "mg:" + b.id;
       const isCol = !S.readMode && collapsedCards.has(colKey);
       return `<div class="card${isCol ? " collapsed" : ""}" data-block-id="${esc(b.id)}" data-block-title="${esc(b.title)}" data-ckey="${esc(colKey)}">${cardHeadHtml(b.title, "6-step guide", colKey)}<div class="card-body"><p class="hint">Plain-English instructions for someone who has never managed large savings or insurance payouts before. Covers what to do in Month 1, how to avoid bad salespeople, and how to turn $1M into steady income.</p>${renderMoneyGuideHtml(false)}</div></div>`;
+    }
+    case "pro_finder": {
+      const colKey = "pf:" + b.id;
+      const isCol = !S.readMode && collapsedCards.has(colKey);
+      return `<div class="card${isCol ? " collapsed" : ""}" data-block-id="${esc(b.id)}" data-block-title="${esc(b.title)}" data-ckey="${esc(colKey)}">${cardHeadHtml(b.title, "5 guides", colKey)}<div class="card-body"><p class="hint">Starting from scratch or on a tight budget? Where to find Bar-referred lawyers, independent immigration attorneys, hourly fee-only financial advisors, free tax clinics, and free hospital/employer advocates.</p>${renderProFinderHtml(false)}</div></div>`;
     }
     case "photos": return photosBlockHtml(b);
     case "glance": {
@@ -773,6 +811,19 @@ function runSearch(q) {
       }
     });
   }
+  if (typeof PRO_FINDER !== "undefined") {
+    const pfMap = getRegion().proFinder || {};
+    const pfEntry = Object.entries(pfMap).find(([, v]) => String(v || "").toLowerCase().includes(term));
+    if (pfEntry) {
+      push("contacts", "Finding Help", `Local directories (${getRegion().label})`, pfEntry[1], "pro_finder");
+    }
+    PRO_FINDER.forEach(c => {
+      const txt = `${c.title} ${c.summary} ${(c.bullets || []).join(" ")} ${c.note || ""}`.toLowerCase();
+      if (txt.includes(term)) {
+        push("contacts", "Finding Help", c.title, c.summary, "pro_finder");
+      }
+    });
+  }
 
   res.innerHTML = hits.length
     ? hits.map((h, i) => `<button type="button" class="sr-item" data-sr="${i}"><span class="sr-tab">${esc(h.tabLabel)}</span><span class="sr-txt"><b>${esc(h.title)}</b>${h.sub ? ` — ${esc(h.sub)}` : ""}</span></button>`).join("")
@@ -944,6 +995,7 @@ document.addEventListener("click", e => {
   if (d.act === "readiness") readinessDialog();
   if (d.act === "ics") downloadIcs();
   if (d.act === "printMoneyGuide") { $("#printSheet").innerHTML = renderMoneyGuideHtml(true); printWithClass("print-sheet-only"); }
+  if (d.act === "printProFinder") { $("#printSheet").innerHTML = renderProFinderHtml(true); printWithClass("print-sheet-only"); }
   if (d.act === "printErSheet") { renderErGrabSheet(); printWithClass("print-sheet-only"); }
   if (d.act === "print") printDialog();
   if (d.act === "backup") backupDialog();
@@ -1417,6 +1469,7 @@ function printDialog() {
       <label class="opt-card"><input type="radio" name="pmode" value="summary" checked><div><b>1-page Family Executive Summary</b><small>High-signal overview of contacts, money, insurance, IDs, papers, titles, kids &amp; shut-offs.</small></div></label>
       <label class="opt-card"><input type="radio" name="pmode" value="er"><div><b>1-page ER &amp; Medical Grab Sheet</b><small>Diagnosis, red-flag fever/ER rule, 24/7 specialist triage, ports/arm limits, rescue meds &amp; portal proxy.</small></div></label>
       <label class="opt-card"><input type="radio" name="pmode" value="moneyguide"><div><b>Survivor's Money &amp; Payout Guide</b><small>Your payout instructions plus the 6-part plain-English guide for handling large insurance payouts.</small></div></label>
+      <label class="opt-card"><input type="radio" name="pmode" value="profinder"><div><b>How to Find Vetted &amp; Low-Cost Help</b><small>Directories &amp; free resources for finding estate, immigration, tax, and fee-only financial help.</small></div></label>
       <label class="opt-card"><input type="radio" name="pmode" value="filled"><div><b>Full guide — filled details only</b><small>Omits empty fields and blank rows so your binder stays clean.</small></div></label>
       <label class="opt-card"><input type="radio" name="pmode" value="all"><div><b>Full guide — include blanks</b><small>Great if you want space to fill things in by hand.</small></div></label>
       <label class="opt-card"><input type="radio" name="pmode" value="caregiver"><div><b>1-page Caregiver / Fridge Sheet</b><small>Home address for ${esc(getRegion().emergency)}, first contacts, kids' pickup/allergies, pets, and shut-offs.</small></div></label>
@@ -1436,6 +1489,7 @@ function printDialog() {
     if (mode === "summary") { $("#printSheet").innerHTML = renderExecutiveSummaryHtml(true); printWithClass("print-sheet-only"); }
     else if (mode === "er") { renderErGrabSheet(); printWithClass("print-sheet-only"); }
     else if (mode === "moneyguide") { $("#printSheet").innerHTML = renderMoneyGuideHtml(true); printWithClass("print-sheet-only"); }
+    else if (mode === "profinder") { $("#printSheet").innerHTML = renderProFinderHtml(true); printWithClass("print-sheet-only"); }
     else if (mode === "filled") printWithClass("print-hide-empty");
     else if (mode === "all") printWithClass("");
     else if (mode === "caregiver") { renderCaregiverSheet(); printWithClass("print-sheet-only"); }
@@ -1596,7 +1650,7 @@ $("#photoIn").onchange = async e => {
 };
 
 function buildStandaloneHtml(pkg) {
-  const schemaData = { TABS, PLAYBOOK, SCRIPTS, GLANCE, KIDS, MONEY_GUIDE: typeof MONEY_GUIDE !== "undefined" ? MONEY_GUIDE : [], REGIONS: typeof REGIONS !== "undefined" ? REGIONS : {} };
+  const schemaData = { TABS, PLAYBOOK, SCRIPTS, GLANCE, KIDS, MONEY_GUIDE: typeof MONEY_GUIDE !== "undefined" ? MONEY_GUIDE : [], PRO_FINDER: typeof PRO_FINDER !== "undefined" ? PRO_FINDER : [], REGIONS: typeof REGIONS !== "undefined" ? REGIONS : {} };
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1766,6 +1820,13 @@ function renderAll(root, S) {
       + (mg.sampleLines?.length?'<div class="mg-ex"><h4>'+esc(mg.sampleTitle||"Sample Allocation")+'</h4><ul>'+mg.sampleLines.map(l=>'<li>'+esc(l)+'</li>').join("")+'</ul></div>':"")
       + '<div class="mg-grid">'+gs.map(g=>'<div class="mg-sec"><h4>'+esc(g.title)+'</h4><p>'+esc(g.summary)+'</p><ul>'+(g.bullets||[]).map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul>'+(g.note?'<div class="mg-note">'+esc(g.note)+'</div>':"")+'</div>').join("")+'</div></div>';
   };
+  const proFinderHtml = (b) => {
+    const pf = reg.proFinder || {}, cs = SC.PRO_FINDER || [];
+    if (!cs.length) return "";
+    return '<div class="card" data-bid="'+esc(b.id)+'" data-btitle="'+esc(b.title)+'"><h3>'+esc(b.title)+'</h3>'
+      + '<div class="mg-banner"><p><b>Quick directories ('+esc(reg.label||"")+'):</b></p>'+(pf.legal?'<p><b>Legal / Estate:</b> '+esc(pf.legal)+'</p>':"")+(pf.visa?'<p><b>Immigration / Visa:</b> '+esc(pf.visa)+'</p>':"")+(pf.money?'<p><b>Financial Advisor:</b> '+esc(pf.money)+'</p>':"")+(pf.tax?'<p><b>Taxes &amp; Free Aid:</b> '+esc(pf.tax)+'</p>':"")+'</div>'
+      + '<div class="mg-grid">'+cs.map(c=>'<div class="mg-sec"><h4>'+esc(c.title)+'</h4><p>'+esc(c.summary)+'</p><ul>'+(c.bullets||[]).map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul>'+(c.note?'<div class="mg-note">'+esc(c.note)+'</div>':"")+'</div>').join("")+'</div></div>';
+  };
   const callLogHtml = () => {
     const b = SC.TABS[0].blocks.find(x => x.id === "call_log");
     const rows = S.lists.call_log || [{}];
@@ -1810,6 +1871,12 @@ function renderAll(root, S) {
       const txt = (g.title+" "+g.summary+" "+(g.bullets||[]).join(" ")+" "+(g.note||"")).toLowerCase();
       if (txt.includes(term)) add("money","Money Guide",g.title,g.summary,"money_guide");
     });
+    const pfEntry = reg.proFinder ? Object.entries(reg.proFinder).find(([,v]) => String(v||"").toLowerCase().includes(term)) : null;
+    if (pfEntry) add("contacts","Finding Help","Local directories ("+(reg.label||"")+")",pfEntry[1],"pro_finder");
+    (SC.PRO_FINDER || []).forEach(c => {
+      const txt = (c.title+" "+c.summary+" "+(c.bullets||[]).join(" ")+" "+(c.note||"")).toLowerCase();
+      if (txt.includes(term)) add("contacts","Finding Help",c.title,c.summary,"pro_finder");
+    });
     SC.KIDS.forEach(([id,,l]) => { const v = String(S.f[id]||""); if (l.toLowerCase().includes(term)||v.toLowerCase().includes(term)) add("kids","For the kids",l,v,"kids_card"); });
     Object.entries(SC.PLAYBOOK).forEach(([tk,p]) => p.phases.forEach(ph => ph.steps.forEach(raw => { const s = rs(raw); if (s.t.toLowerCase().includes(term)||s.d.toLowerCase().includes(term)) add("start","Playbook",s.t,s.d,s.id,tk); })));
     return out;
@@ -1843,6 +1910,7 @@ function renderAll(root, S) {
           if (b.type === "fields") { const fs = b.fields.map(f => rf(f)).map(([id,l]) => fv(l, id)).join(""); if (fs) html += '<div class="card" data-btitle="'+esc(b.title)+'"><h3>'+esc(b.title)+'</h3><div class="grid2">'+fs+'</div></div>'; }
           if (b.type === "list" && b.id !== "call_log") html += listHtml(b.title, b.id, b.cols);
           if (b.type === "money_guide") html += moneyGuideHtml(b);
+          if (b.type === "pro_finder") html += proFinderHtml(b);
           if (b.type === "photos" && S.photos.length) html += '<div class="card" data-bid="visual_refs" data-btitle="Visual reference photos"><h3>'+esc(b.title)+'</h3><div class="pgrid">'+S.photos.map(ph => '<div class="pcard"><img src="'+esc(ph.dataUrl)+'" alt="'+esc(ph.label)+'" onclick="window.open(this.src)"><div style="font-size:12.5px;font-weight:600;margin-top:4px">'+esc(ph.label)+'</div></div>').join("")+'</div></div>';
           if (b.type === "scripts") html += '<div class="card" data-btitle="What to say"><h3>What to say</h3>'+SC.SCRIPTS.map(([st,sb]) => '<div class="script"><b>'+esc(st)+'</b><div><i>'+esc(sb)+'</i></div></div>').join("")+'</div>';
           if (b.type === "letter" && String(S.f.letter||"").trim()) html += '<div class="card" data-btitle="A note to you"><h3>A note to you</h3><div class="val" style="font-family:var(--serif);font-size:17px">'+linkify(S.f.letter)+'</div></div>';

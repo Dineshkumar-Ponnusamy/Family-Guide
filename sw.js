@@ -1,4 +1,4 @@
-const CACHE = "ffg-v4";
+const CACHE = "ffg-v5";
 const ASSETS = [
   "./",
   "./index.html",

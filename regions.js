@@ -25,6 +25,12 @@ const REGIONS = {
         "Long-term index portfolio ($700,000) paying ~3.5%–4% ($24,500–$28,000/yr sustainable) before Social Security survivor benefits or salary."
       ]
     },
+    proFinder: {
+      legal: "State Bar Lawyer Referral Service (findlegalhelp.org) · Legal Aid (LawHelp.org) · Employer EAP",
+      visa: "AILA Lawyer Directory (ailalawyer.com) · ImmigrationLawHelp.org (free/low-cost clinics)",
+      money: "Garrett Planning Network (hourly) · NAPFA / AdviceOnlyNetwork · Foundation for Financial Planning (pro-bono)",
+      tax: "IRS VITA / TCE & AARP Tax-Aide (free) · NAEA.org (Enrolled Agents) · Dollar For (free hospital charity care)"
+    },
     fieldOverrides: {},
     listOverrides: {
       gov_ids: {
@@ -52,6 +58,12 @@ const REGIONS = {
         "Near-term transition / education fund ($130,000) in short-term T-Bills or CDs.",
         "Long-term global diversified index portfolio ($750,000) yielding ~3.5%–4% ($26k–$30k/yr) to support family stability in either country."
       ]
+    },
+    proFinder: {
+      legal: "US State Bar Referral (findlegalhelp.org) + India High Court / Succession Advocate (keep wills separate & non-revoking)",
+      visa: "AILA Independent H-1B/INA 204(l) Counsel (ailalawyer.com) + nearest Indian Consulate / Embassy",
+      money: "Fee-Only CFP® in US (Garrett/NAPFA) + SEBI-Registered Investment Adviser (feeonlyindia.com) in India",
+      tax: "Cross-border CPA / CA skilled in FBAR, FATCA (Form 8938), Form 3520 & US-India DTAA treaty"
     },
     fieldOverrides: {
       m_monthly: { ph: "e.g. $5,500 US + ₹45,000 India" },
@@ -94,6 +106,12 @@ const REGIONS = {
         "Near-term 1–5 year goals (₹30–40 lakh) in short-duration Debt Funds or staggered FDs for tuition and family milestones.",
         "Long-term diversified portfolio (₹1.25–1.35 Cr in broad index/hybrid funds) supporting ~3.5%–4% annual withdrawal (₹4.5–5.4L/yr sustainable) before pension or salary."
       ]
+    },
+    proFinder: {
+      legal: "State Bar Council Succession Advocate · NALSA / DLSA (free legal aid) · Court Legal Heir / Succession Certificate",
+      visa: "Indian Embassy / Consulate & MEA Madad Portal (for overseas family members)",
+      money: "SEBI-Registered Investment Adviser (RIA) via SEBI website or feeonlyindia.com (never bank RMs / ULIPs)",
+      tax: "ICAI Chartered Accountant (CA) directory · Income Tax India e-Filing Portal"
     },
     fieldOverrides: {
       m_monthly: { ph: "e.g. about ₹1,20,000 / month" },
@@ -143,6 +161,12 @@ const REGIONS = {
         "Invest the remaining long-term core (60%–75%) in globally diversified, tax-treaty-friendly low-cost funds."
       ]
     },
+    proFinder: {
+      legal: "National Bar Lawyer Referral & Legal Aid (check both host and home country bar associations)",
+      visa: "Licensed Independent Immigration Attorney (never unlicensed agents) + Home-Country Embassy/Consulate",
+      money: "Cross-border Fee-Only Fiduciary Planner familiar with tax treaties in both countries",
+      tax: "Licensed Cross-Border CPA / Chartered Accountant + Employer EAP & Hospital Social Worker (free)"
+    },
     fieldOverrides: {
       d_will: { label: "Host-country & Home-country Wills: where originals are" },
       d_guard: { label: "Local temporary guardian & permanent guardian" }
@@ -181,6 +205,12 @@ const REGIONS = {
         "Near-term 1–5 year buffer (£75,000) in Cash ISAs / short-dated Gilts.",
         "Long-term diversified core (£350,000 across Stocks & Shares ISAs/GIA) yielding ~3.5%–4% (£12,250–£14,000/yr) alongside pension/survivor benefits."
       ]
+    },
+    proFinder: {
+      legal: "Law Society 'Find a Solicitor' · STEP (estate specialists) · Citizens Advice (free)",
+      visa: "IAA (formerly OISC) Regulated Advisers & Law Society Immigration Solicitors",
+      money: "Chartered Independent Financial Adviser (PFS / CII / Unbiased) · MoneyHelper (free government guidance)",
+      tax: "ICAEW / ATT Chartered Tax Advisers · TaxAid (free help for lower incomes)"
     },
     fieldOverrides: {
       m_monthly: { ph: "e.g. about £4,200 / month" },
@@ -226,6 +256,12 @@ const REGIONS = {
         "Long-term diversified portfolio (CA$780,000) generating ~3.5%–4% (CA$27k–CA$31k/yr) alongside CPP survivor benefits."
       ]
     },
+    proFinder: {
+      legal: "Provincial Law Society Referral Service (often free 30-min consult) & Legal Aid",
+      visa: "CICC Licensed Consultants (RCIC) & Provincial Law Society Immigration Lawyers",
+      money: "Advice-Only / Fee-Only CFP® directories (zero product commissions)",
+      tax: "CPA Canada · CVITP Free Community Volunteer Tax Clinics"
+    },
     fieldOverrides: {
       w_hsa: { label: "Extended health / HSA / group benefits" },
       d_hcd: { label: "Personal / Healthcare Directive & Representation Agreement" },
@@ -265,6 +301,12 @@ const REGIONS = {
         "Near-term 1–5 year buffer (A$130,000) in short-term Deposits / high-grade bonds.",
         "Long-term diversified portfolio (A$750,000 across Super/ETF core) providing ~3.5%–4% (A$26k–A$30k/yr sustainable)."
       ]
+    },
+    proFinder: {
+      legal: "State Law Society Referral Service & Community Legal Centres (free)",
+      visa: "OMARA Registered Migration Agents & Law Society Accredited Immigration Specialists",
+      money: "ASIC Financial Advisers Register (fee-only) · Moneysmart & National Debt Helpline (1800 007 007, free)",
+      tax: "Tax Practitioners Board (TPB) Register · ATO Tax Help (free volunteer program)"
     },
     fieldOverrides: {
       w_hsa: { label: "Private hospital / extras cover" },
@@ -307,6 +349,12 @@ const REGIONS = {
         "Long-term global diversified ETF core (€370,000) yielding ~3.5%–4% (€13k–€15k/yr) alongside state survivor pensions."
       ]
     },
+    proFinder: {
+      legal: "National Bar Association & Public Notary Chamber (notaries draft wills & handle succession across most of the EU)",
+      visa: "Licensed Local Immigration Attorney + Home-Country Consulate / Embassy",
+      money: "Independent Fee-Only Financial Planner (honorarium/flat-fee, zero bank commissions)",
+      tax: "Licensed Tax Advisor (Steuerberater / Expert-Comptable / Gestor) & Employer EAP"
+    },
     fieldOverrides: {
       w_hsa: { label: "Supplemental health insurance" },
       k_911: { label: "If someone is hurt", ph: "Call 112. Say your name, our address, and what happened." }
@@ -346,6 +394,12 @@ const REGIONS = {
         "Near-term 1–5 year needs (10%–15% / $100k–$150k) in short-term government bills or deposits.",
         "Long-term diversified portfolio (60%–75% / $600k–$750k) using a ~3.5%–4% annual withdrawal guide ($24k–$30k/yr sustainable)."
       ]
+    },
+    proFinder: {
+      legal: "National or Regional Bar Association Referral Service & Legal Aid / Community Legal Clinics",
+      visa: "Licensed Immigration Attorney (verify bar/regulator license) + Home-Country Embassy",
+      money: "Independent Fee-Only Fiduciary Financial Advisor (hourly or flat fee, zero commissions)",
+      tax: "Licensed CPA / Chartered Accountant · Employer EAP & Hospital Social Worker (free)"
     },
     fieldOverrides: {
       w_hsa: { label: "Health savings / medical benefits" },

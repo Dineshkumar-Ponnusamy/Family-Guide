@@ -248,6 +248,71 @@ const MONEY_GUIDE = [
   }
 ];
 
+const PRO_FINDER = [
+  {
+    id: "estate",
+    title: "1. Estate & Probate Attorney (Even Without a Will)",
+    badge: "Legal",
+    summary: "You don't need to be wealthy—or have an existing lawyer—to get trustworthy estate or probate help affordably.",
+    bullets: [
+      "Check hidden employer perks first: an Employee Assistance Program (EAP) often includes a free 30-minute legal consult, and Group Legal Plans (e.g., MetLife Legal / ARAG) cover wills & POA for a low payroll fee.",
+      "Use your official State or National Bar Association Lawyer Referral Service (free or $25–$50 for a 30-minute consult) or local Legal Aid / law school elder-law clinics for free/sliding-scale help.",
+      "In civil-law countries (much of Europe), a public Notary handles wills and succession directly under fixed government fee schedules.",
+      "Free steps you can do today: sign free hospital/state Advance Healthcare Directive forms and add free POD/TOD ('Payable/Transferable on Death') beneficiaries on bank and investment accounts."
+    ],
+    note: "First question to ask: \"Do you offer a free or flat-fee initial consult, and can you quote a flat fee for will/POA drafting or probate administration?\""
+  },
+  {
+    id: "immigration",
+    title: "2. Immigration Attorney (Visas, Dependents & Cross-Border)",
+    badge: "Visa / Status",
+    summary: "Company immigration lawyers represent the employer, not solely your family—know how to get independent, vetted help quickly.",
+    bullets: [
+      "Ask HR/company immigration counsel immediately for PDF copies of all filings (I-797, I-140, PERM, I-485, work permits) so an independent lawyer can review your exact timeline.",
+      "Book a 30–60 minute independent strategy consult ($150–$350) through official directories (AILA in US, IAA/OISC or Law Society in UK, CICC in Canada, OMARA in Australia) BEFORE leaving the country.",
+      "Need free or low-cost help? Search DOJ-accredited nonprofit clinics (e.g., ImmigrationLawHelp.org in the US), law school immigration clinics, and your home-country Embassy/Consulate for emergency travel/repatriation letters."
+    ],
+    note: "Red flag: NEVER pay an unlicensed 'notario', travel agent, or social-media 'visa consultant.' Always verify their active bar number or government regulator ID."
+  },
+  {
+    id: "financial",
+    title: "3. Financial Advisor (No Large Portfolio Required)",
+    badge: "Money",
+    summary: "You do not need $500k+ to get good financial advice—and you never have to buy an insurance product or give up a % of your savings.",
+    bullets: [
+      "Free starting points: Employer EAP financial coaching, nonprofit credit counseling (NFCC / MoneyHelper / National Debt Helpline), and pro-bono CFP® programs (like Foundation for Financial Planning for families facing serious illness or bereavement).",
+      "Pay only for advice, never sales: look for Hourly or Flat-Fee Advice-Only / Fee-Only Fiduciaries (Garrett Planning Network, AdviceOnlyNetwork, NAPFA, XYPN in US; SEBI-RIA & feeonlyindia.com in India; Chartered IFA in UK).",
+      "Need a calm DIY option while pausing? A single low-cost broad Target-Date or Balanced Index Fund at a major low-cost brokerage beats expensive managed accounts or annuities."
+    ],
+    note: "Red flag: 'Free' advisors at banks or insurance agencies usually earn large commissions selling annuities, whole/indexed life insurance, or ULIPs. Always demand a written Fiduciary Oath."
+  },
+  {
+    id: "tax",
+    title: "4. Tax Consultant / CPA / Chartered Accountant (CA)",
+    badge: "Taxes",
+    summary: "Use free volunteer tax clinics for routine returns, or hire a licensed tax pro for a one-time crisis/estate tax session.",
+    bullets: [
+      "Free official help for straightforward returns: IRS VITA / TCE and AARP Tax-Aide (US), CVITP (Canada), ATO Tax Help (Australia), and TaxAid (UK).",
+      "For final returns, surviving-spouse filing rules, inherited property/stocks, or insurance questions: hire an independent CPA / Enrolled Agent (EA) / Chartered Accountant (CA) for a one-time hourly/flat return.",
+      "Cross-border / NRI families (e.g., US + India): specifically ask for a cross-border CPA/CA experienced with FBAR, FATCA (Form 8938), Form 3520, and Double Taxation Treaties (DTAA)."
+    ],
+    note: "Ask before selling inherited assets: \"How do surviving-spouse tax rules and step-up in cost basis affect what I would owe if I sell?\""
+  },
+  {
+    id: "hidden_allies",
+    title: "5. Free 'Hidden Allies' Almost Every Family Forgets",
+    badge: "Free help",
+    summary: "Before spending savings on private consultants, tap free institutional advocates who handle these crises every day.",
+    bullets: [
+      "Hospital Social Worker & Patient Navigator (free): ask at admission or clinic for charity care applications, drug copay cards, parking/gas/meal vouchers, rehab placement, and FMLA/disability forms.",
+      "Employer EAP (free for the whole household): covers grief counseling, short legal consults, financial coaching, and childcare/eldercare referrals—even after work hours.",
+      "Nonprofit Medical Bill & Illness Advocates (free): Dollar For (helps cancel eligible nonprofit hospital bills via charity care), Patient Advocate Foundation (free case managers), and national disease foundations.",
+      "Home-Country Consulate & School Counselors: consulates help with overseas documents and travel emergencies; school counselors quietly support children during illness or loss."
+    ],
+    note: "You don't need to assemble a whole team in one week—make just ONE free call (EAP, hospital social worker, or bar referral) to get steady next steps."
+  }
+];
+
 const TABS = [
   { id: "start", label: "Start here", title: "Start here", lede: "The most important things first. Then pick what's happening and check things off as you go.",
     blocks: [
@@ -268,6 +333,7 @@ const TABS = [
         seed: [{role:"Estate attorney"},{role:"Financial advisor"},{role:"Accountant / tax preparer"},{role:"Employer HR"},{role:"Insurance agent"},{role:"Primary doctor"}],
         suggestCol: "role",
         suggestions: ["Immigration attorney", "Pediatrician", "Dentist", "Optometrist", "Mortgage broker", "Property manager", "Veterinarian", "Trusted tech helper"] },
+      { type: "pro_finder", id: "pro_finder", title: "Don't have these professionals yet? How to find vetted & low-cost help" },
       { type: "list", id: "circle", title: "Wider circle to notify", hint: "Family, close friends, my manager, groups I'm part of, and any online friends or communities (Discord, gaming, forums).",
         cols: [["name","Name / group"],["phone","Phone or email"],["who","Who should tell them"]], seed: [{}] }
     ]},
