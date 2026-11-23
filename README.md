@@ -1,4 +1,4 @@
-# Family Field Guide
+# Family Guide
 
 A private, offline emergency guide for your family. If something happens and you can't be there, your spouse opens one page and finds what to do first, who to call, where the money and papers are, and a page written for the kids.
 
@@ -8,7 +8,7 @@ It's plain HTML, CSS and JavaScript: no build step, no server, no accounts, no t
 
 - Answers save only in the browser you type them in (`localStorage`).
 - **Save backup** makes a file locked with a passphrase (AES‑256‑GCM, key derived with PBKDF2 using 250,000 rounds). Share the file and passphrase with your spouse separately.
-- `.gitignore` blocks backup files (`family-field-guide-*.json`) so they can't be committed by accident.
+- `.gitignore` blocks backup files (`family-guide-*.json`) so they can't be committed by accident.
 - Never type passwords or full account numbers. Write where to find them, plus the last 4 digits.
 
 Use a **private** repository anyway. Your section names alone can reveal things about your family.
@@ -61,22 +61,6 @@ Edit `schema.js`.
 - Every `id` must be unique across the whole file.
 - Don't rename an `id` after you've filled it in. Answers are stored by `id`, so a renamed field shows up empty (the old answer is still in your backup).
 - Sections you added in the app can be copied into code: **GitHub → Download project files** also saves `my-sections.json` with labels only.
-
-## Upload to GitHub
-
-**In the browser:** create a private repo → **Add file → Upload files** → drag these files in → commit. Rename `gitignore.txt` to `.gitignore` if your download renamed it.
-
-**From a terminal:**
-
-```sh
-cd family-field-guide
-git init
-git add .
-git commit -m "Family Field Guide"
-git branch -M main
-git remote add origin https://github.com/<you>/family-field-guide.git
-git push -u origin main
-```
 
 ## Keep it current
 
