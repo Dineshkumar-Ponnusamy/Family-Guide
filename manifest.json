@@ -1,0 +1,17 @@
+{
+  "name": "Our Family Field Guide",
+  "short_name": "Family Guide",
+  "description": "Private, offline emergency and digital legacy guide for your family.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f1e6",
+  "theme_color": "#1f3a2e",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

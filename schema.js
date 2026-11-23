@@ -99,11 +99,27 @@ const PLAYBOOK = {
         { id: "c8", t: "Keep a log of calls and decisions", d: "Note who you spoke with, medical updates, and expenses.", ref: "Start here → Call & claim log", refTab: "start", refBlock: "call_log" }
       ]}
     ]
+  },
+  visa: {
+    label: "Work visa / cross-border emergency (H-1B, NRI, Expat)",
+    phases: [
+      { when: "First 48 hours", steps: [
+        { id: "v1", t: "Check dependent visa status & grace-period clock", d: "If a primary visa holder (e.g., H-1B, L-1, Skilled Worker) passes away or loses employment, dependents (e.g., H-4, L-2) can face an immediate status change or 60-day clock. Contact an immigration attorney before leaving the country.", ref: "Contacts → Professionals", refTab: "contacts", refBlock: "pros" },
+        { id: "v2", t: "Secure passports, visa papers & kids' temporary care", d: "Locate I-797/I-94/I-140, passports, EADs, and OCI/residency cards. If both parents are incapacitated, call the local temporary guardian right away so kids stay with trusted adults while overseas family arranges visas.", ref: "Documents → Where every document is", refTab: "docs", refBlock: "doclocs" },
+        { id: "v3", t: "Contact the home-country Embassy or Consulate if needed", d: "Embassies assist with emergency travel documents, repatriation of remains, and notarized cross-border letters.", ref: "Contacts → Professionals", refTab: "contacts", refBlock: "pros" }
+      ]},
+      { when: "First weeks", steps: [
+        { id: "v4", t: "Call employer HR & company immigration counsel", d: "Request copies of all immigration filings (I-140, PERM, I-485, I-797) and ask about survivor relief (e.g., INA § 204(l)), final pay, and group life insurance.", ref: "Money → Work benefits", refTab: "money", refBlock: "Work benefits" },
+        { id: "v5", t: "Check both host-country and home-country wills", d: "Cross-border families often have separate wills for each country. Confirm neither revokes the other, and ask a cross-border attorney about non-citizen estate tax rules (e.g., $60k NRA threshold in the US) before moving assets.", ref: "Documents → Legal papers", refTab: "docs", refBlock: "Legal papers" },
+        { id: "v6", t: "Map overseas accounts, nominees & property", d: "List NRE/NRO/FCNR, Demat, EPF/PPF, foreign bank accounts, and property. Note that in countries like India, a bank/demat nominee is often only a custodian—legal heirs/will govern final ownership.", ref: "Money → Bank accounts", refTab: "money", refBlock: "accounts" }
+      ]}
+    ]
   }
 };
 
 const SCRIPTS = [
   ["Calling a bank or insurer", "\"I'm calling about my spouse's account. They are [in the hospital / have passed away]. I have [power of attorney / a death certificate]. What do you need from me, and can you send it in writing?\""],
+  ["Calling an immigration attorney about dependent status", "\"My spouse is on [H-1B / L-1 / work visa] and [is hospitalized / lost their job / has passed away]. I am on [H-4 / dependent status] and our pending filings are [I-140 / I-485 / none]. What are our exact deadlines and options before we make any travel or filing moves?\""],
   ["When someone pushes you to decide", "\"I'm not making any decisions right now. Please send me the details and I'll get back to you.\""],
   ["When a debt collector calls about a solo debt", "\"This account was solely in my spouse's name. Please send all documentation in writing to the estate, and I will have our attorney review it.\""],
   ["Asking a friend for help", "\"Could you take over [meals / school runs / phone calls] this week? It would help me a lot.\""],
@@ -205,6 +221,7 @@ const TABS = [
         ["hk_trash","Trash & recycling days",""],
         ["hk_quirks","House quirks, alarm & smart lock overrides","e.g. how to open smart lock if battery dies, alarm disarm", true]
       ]},
+      { type: "photos", id: "visual_refs", title: "Visual reference photos", hint: "Optional encrypted photos of your water/gas shut‑off valve, breaker panel, health insurance cards, or pet meds. Compressed locally (~80–120 KB each) and encrypted inside your backups." },
       { type: "list", id: "pets", title: "Pets", hint: "Food brand, schedule, medications, vet, microchip number, and behavioral quirks.", cols: [["name","Name"],["food","Food & schedule"],["meds","Meds"],["vet","Vet & phone"],["sitter","Backup caretaker"]], seed: [{}] }
     ]},
 
@@ -247,6 +264,22 @@ const ESSENTIALS = [
 ];
 
 const SECTION_TEMPLATES = [
+  {
+    name: "Visa, Immigration & Cross-Border (H-1B / NRI)",
+    desc: "Visa filings, dependent status, OCI, separate wills, NRE/NRO & local guardian",
+    fields: [
+      { label: "Visa type, I-797 / I-94 / I-140 / EAD copies location", wide: true },
+      { label: "Employer immigration firm & personal immigration attorney", wide: false },
+      { label: "Dependent visa (H-4 / L-2) & grace-period / INA 204(l) notes", wide: false },
+      { label: "Kids' passports, OCI cards & local temporary guardian (while overseas family travels)", wide: true },
+      { label: "Separate wills (Host country & Home country — non-revoking)", wide: false },
+      { label: "Home-country Embassy / Consulate emergency contact", wide: false }
+    ],
+    lists: [
+      { title: "Overseas accounts (NRE/NRO, Demat, EPF/PPF, PAN/Aadhaar)", cols: ["Institution / Type", "Account (last 4)", "Nominee / Joint", "How to access"] },
+      { title: "Home-country property & trusted local contacts", cols: ["Property / Contact", "City", "Phone / Details", "Notes"] }
+    ]
+  },
   {
     name: "Smart Home & Wi‑Fi",
     desc: "Router, smart locks, alarm codes, cameras, automations",

@@ -15,29 +15,37 @@ Use a **private** repository anyway. Your section names alone can reveal things 
 
 ## Features
 
-- **Edit & Read modes:** Switch to **Read mode** so a stressed reader can tap phone numbers/links, check off playbook steps, and log calls without accidentally editing or seeing empty boxes. Includes **A+** large text and **Contrast** toggles for 3 AM reading.
-- **Standalone Offline Copy & Smart Merge:** Export a self-contained `.html` locked copy that includes search, clickable playbook links, editable Call & claim log, Caregiver sheet printing, and **Save updated copy (.html)** so progress persists offline. **Open backup** supports **Smart Merge** to combine edits from both spouses without overwriting.
-- **Playbooks & Call Log:** Step-by-step action plans for hospital/incapacitation, death, money emergencies, and unreachable parents (caregiver), with clickable cross-links and a built-in **Call & claim log**.
-- **15-Minute Essentials & Search:** Jump straight to the 10 highest-impact items, or press `/` (with `↑`/`↓`/`Enter` navigation) to search across every field, table, and playbook step.
-- **Readiness Audit & 10-Minute Fire Drill:** Spots real-world gaps (solo-only bank accounts, missing retirement/life-insurance beneficiaries, missing phone/2FA unlock info, stale backups) and tracks a 5-step spouse dry-run.
-- **Modular Section Templates:** One-click templates under **+ Section** for Smart Home & Wi‑Fi, Crypto/Domains/Homelab, Small Business, Traveling/Caregiver, International/Expat Assets, and Aging Parents.
-- **Flexible Printing:** Print the full guide (with or without empty blanks), a **1-page Caregiver / Fridge Sheet**, or a **1-page Break-Glass Cover Sheet** for your safe.
+- **Country & Cross-Border Presets:** Switch between **United States**, **India**, **US + India (H-1B / Visa / NRI)**, **Cross-Border / Work Visa**, **United Kingdom**, **Canada**, **Australia**, **European Union**, and **Generic** to adapt emergency numbers, retirement/tax terminology, and visa/consulate steps without losing your answers.
+- **Edit & Read modes:** Switch to **Read mode** so a stressed reader can tap phone numbers/links, check off playbook steps, and log calls without accidentally editing or seeing empty boxes. Includes **A+** large text, **Contrast**, and optional **In-Browser Lock** with 15-minute idle auto-lock.
+- **Standalone Offline Copy & Smart Merge:** Export a self-contained `.html` locked copy that includes search, clickable playbook links, editable Call & claim log, Caregiver sheet printing, photo snippets, and **Save updated copy (.html)**. **Open backup** supports **Smart Merge** to combine edits from both spouses without overwriting.
+- **Memorable Passphrases & 2-of-3 Split Recovery Cards:** Generate typo-proof 5-word Diceware passphrases and optional 2-of-3 Shamir Split Recovery Cards (Spouse · Safe · Trusted Person) where any 2 cards unlock your backup.
+- **Encrypted Photo Snippets:** Attach compressed offline photos (~80–120 KB) of shut-off valves, breaker panels, or insurance cards directly inside your encrypted guide.
+- **Playbooks & Call Log:** Step-by-step action plans for hospital/incapacitation, death, money emergencies, unreachable parents (caregiver), and **work-visa/cross-border emergencies**, with clickable cross-links and a built-in **Call & claim log**.
+- **15-Minute Essentials, Demo Mode & Search:** Preview everything with 1-click **Load sample family**, jump to the 10 essentials, or press `/` (with `↑`/`↓`/`Enter` navigation) to search across every field, table, and playbook step.
+- **Readiness Audit & 10-Minute Fire Drill:** Spots real-world gaps (solo-only bank accounts, missing retirement/life-insurance beneficiaries, missing phone/2FA unlock info, cross-border visa gaps, stale backups) and tracks a 5-step spouse dry-run.
+- **Modular Section Templates:** One-click templates under **+ Section** for Visa/Immigration/Cross-Border, Smart Home & Wi‑Fi, Crypto/Domains/Homelab, Small Business, Traveling/Caregiver, International/Expat Assets, and Aging Parents.
+- **Flexible Printing & PWA:** Print the full guide (with or without empty blanks), a **1-page Caregiver / Fridge Sheet**, a **1-page Break-Glass Cover Sheet**, or install as an offline PWA (`manifest.json` + `sw.js`).
 - **Check-Up Reminders:** Export a recurring 6-month `.ics` calendar reminder next to **Mark reviewed**.
 
 ## Run it
 
 Open `index.html` in a browser. That's all.
 
-To use it from any device, turn on **Settings → Pages** (deploy from the `main` branch) in your GitHub repo. Each device keeps its own answers, so use **Open backup** on a new device to load the same details.
+To use it from any device (or install on your phone as an offline PWA), turn on **Settings → Pages** (deploy from the `main` branch) in your GitHub repo. Each device keeps its own answers, so use **Open backup** on a new device to load or merge the same details.
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `index.html` | Page shell |
-| `styles.css` | Look and print layout |
-| `schema.js` | **All content**: checklists, scripts, sections, fields. Edit this to extend the guide. |
-| `app.js` | Saving, rendering, added sections, backups, export |
+| `index.html` | Page shell & PWA manifest link |
+| `styles.css` | Look, accessibility modes & print layout |
+| `schema.js` | **Core content**: checklists, scripts, sections, fields, fire drill |
+| `regions.js` | **Country & cross-border presets**, sample demo families, Diceware wordlist |
+| `app.js` | Saving, rendering, readiness audit, smart merge, Shamir split, photo compression, backups |
+| `manifest.json` / `sw.js` / `icon.svg` | Offline PWA support |
+
+### Add your country
+To contribute a new country preset, add an entry to `REGIONS` in `regions.js` with your local `emergency` number, `fieldOverrides`, `listOverrides`, and `stepOverrides`.
 
 ## Extending the guide
 

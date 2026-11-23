@@ -3,9 +3,11 @@
    handles Read/Edit modes, search, essentials, templates, print sheets,
    locked JSON + standalone HTML backups, and project export. */
 const KEY = "familyFieldGuide.v1";
-const PROJECT_FILES = ["index.html", "styles.css", "schema.js", "app.js", "README.md", "LICENSE"];
+const LOCK_KEY = "familyFieldGuide.locked.v1";
+const PROJECT_FILES = ["index.html", "styles.css", "schema.js", "regions.js", "app.js", "manifest.json", "sw.js", "icon.svg", "README.md", "LICENSE"];
 const GITIGNORE = "# Never commit your family's details\nfamily-field-guide-*.json\nfamily-field-guide-*.html\nfamily-guide-*.json\n*.backup.json\n.DS_Store\n";
 let S = load();
+let browserLockPass = null, idleTimer = null;
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const safeJson = v => JSON.stringify(v).replace(/<\/script/gi, "<\\/script");
@@ -19,6 +21,11 @@ function norm() {
   S.f ??= {}; S.lists ??= {}; S.checks ??= {}; S.track ??= "hurt"; S.tab ??= "start";
   S.extra ??= {}; S.customTabs ??= [];
   S.fireDrill ??= {}; S.lastDryRun ??= null;
+  S.photos ??= [];
+  S.region ??= "us";
+  if (typeof REGIONS !== "undefined" && !REGIONS[S.region]) S.region = "us";
+  S.isDemo = Boolean(S.isDemo);
+  S.dismissDemo = Boolean(S.dismissDemo);
   S.readMode = Boolean(S.readMode);
   S.hideEssentials = Boolean(S.hideEssentials);
   S.largeText = Boolean(S.largeText);
@@ -31,6 +38,24 @@ function norm() {
   Object.values(S.extra).flat().forEach(x => { if (x.type === "list") S.lists[x.id] ??= [{}]; });
   if (!allTabs().some(t => t.id === S.tab)) S.tab = "start";
 }
+function getRegion() {
+  return (typeof REGIONS !== "undefined" && REGIONS[S.region]) ? REGIONS[S.region] : { label: "United States", emergency: "911", currency: "$", crossBorder: false, indiaNotes: false, fieldOverrides: {}, listOverrides: {}, stepOverrides: {} };
+}
+function rField(f) {
+  const ov = getRegion().fieldOverrides?.[f[0]];
+  if (!ov) return f;
+  return [f[0], ov.label ?? f[1], ov.ph ?? f[2], f[3]];
+}
+function rList(b) {
+  const ov = getRegion().listOverrides?.[b.id];
+  if (!ov) return b;
+  return { ...b, hint: ov.hint ?? b.hint, cols: ov.colLabels ? b.cols.map(([k, l]) => [k, ov.colLabels[k] || l]) : b.cols };
+}
+function rStep(s) {
+  const ov = getRegion().stepOverrides?.[s.id];
+  if (!ov) return s;
+  return { ...s, t: ov.t ?? s.t, d: ov.d ?? s.d };
+}
 function autoGrow(ta) {
   if (!ta || !ta.style) return;
   ta.style.height = "auto";
@@ -39,10 +64,21 @@ function autoGrow(ta) {
 }
 const allTabs = () => [...TABS, ...S.customTabs.map(c => ({ ...c, custom: true, blocks: [], lede: "Your own section. Add fields or tables below." }))];
 
-let saveT;
+let saveT, lockQueue = Promise.resolve();
 function save(quiet, touch = true) {
   if (touch) S.updated = new Date().toISOString();
-  localStorage.setItem(KEY, JSON.stringify(S));
+  if (browserLockPass && hasCrypto()) {
+    localStorage.removeItem(KEY);
+    const snap = JSON.stringify(S);
+    lockQueue = lockQueue.then(async () => {
+      const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await keyFrom(browserLockPass, salt), enc.encode(snap));
+      localStorage.setItem(LOCK_KEY, JSON.stringify({ app: "family-field-guide", v: 1, salt: b64(salt), iv: b64(iv), data: b64(ct) }));
+    }).catch(() => {});
+    resetIdleLockTimer();
+  } else {
+    localStorage.setItem(KEY, JSON.stringify(S));
+  }
   meter();
   if (!quiet) { clearTimeout(saveT); saveT = setTimeout(() => toast("Saved on this device"), 500); }
 }
@@ -174,24 +210,46 @@ function essentialsHtml() {
   </div>`;
 }
 
+function photosBlockHtml(b) {
+  const photos = S.photos || [];
+  if (S.readMode && !photos.length) return "";
+  return `<div class="card${photos.length ? "" : " is-empty"}" data-block-id="${esc(b.id)}" data-block-title="${esc(b.title)}">
+    <h3>${esc(b.title)}</h3>
+    ${b.hint ? `<p class="hint">${esc(b.hint)}</p>` : ""}
+    ${photos.length ? `<div class="photo-grid">${photos.map(p => `<div class="photo-card">
+      ${S.readMode ? "" : `<button type="button" class="cx" style="top:4px;right:6px" title="Remove photo" data-delphoto="${esc(p.id)}">✕</button>`}
+      <img src="${esc(p.dataUrl)}" alt="${esc(p.label)}" data-zoom="${esc(p.id)}">
+      <div class="photo-cap">${esc(p.label)}</div>
+    </div>`).join("")}</div>` : `<p class="hint" style="margin:4px 0 0">No photos added yet.</p>`}
+    ${S.readMode ? "" : `<div class="photo-bar">
+      <button type="button" class="add blue" data-act="addPhoto"${photos.length >= 10 ? " disabled" : ""}>+ Add photo</button>
+      <span style="font-family:var(--mono);font-size:11.5px;color:var(--mute)">${photos.length} / 10 photos</span>
+    </div>`}
+  </div>`;
+}
+
 function block(b) {
   switch (b.type) {
     case "fields": {
       const anyFilled = b.fields.some(f => String(S.f[f[0]] || "").trim() !== "");
       if (S.readMode && !anyFilled) return "";
       return `<div class="card${anyFilled ? "" : " is-empty"}" data-block-title="${esc(b.title)}"><h3>${esc(b.title)}</h3>${b.hint ? `<p class="hint">${esc(b.hint)}</p>` : ""}<div class="grid2">${
-        b.fields.map(f => {
-          const empty = !String(S.f[f[0]] || "").trim();
+        b.fields.map(f => rField(f)).map(rf => {
+          const empty = !String(S.f[rf[0]] || "").trim();
           if (S.readMode && empty) return "";
-          return `<div class="${empty ? "is-empty" : ""}" style="${f[3] ? "grid-column:1/-1" : ""}">${field(...f)}</div>`;
+          return `<div class="${empty ? "is-empty" : ""}" style="${rf[3] ? "grid-column:1/-1" : ""}">${field(...rf)}</div>`;
         }).join("")}</div></div>`;
     }
-    case "list": return listCard(b.id, b.title, b.hint, b.cols, "", { crisisEditable: b.crisisEditable });
+    case "list": {
+      const lb = rList(b);
+      return listCard(lb.id, lb.title, lb.hint, lb.cols, "", { crisisEditable: lb.crisisEditable });
+    }
+    case "photos": return photosBlockHtml(b);
     case "glance": {
       const anyFilled = GLANCE.some(g => String(S.f[g[0]] || "").trim() !== "");
       const body = S.readMode && !anyFilled
         ? `<p class="hint" style="color:#c9d3cc;margin:0">Nothing filled in here yet.</p>`
-        : `<div class="g">${GLANCE.map(g => (S.readMode && !String(S.f[g[0]] || "").trim()) ? "" : field(...g)).join("")}</div>`;
+        : `<div class="g">${GLANCE.map(g => rField(g)).map(rg => (S.readMode && !String(S.f[rg[0]] || "").trim()) ? "" : field(...rg)).join("")}</div>`;
       return `${essentialsHtml()}<div class="glance${anyFilled ? "" : " is-empty"}" data-block-title="If you read nothing else"><h3>If you read nothing else</h3>${body}</div>`;
     }
     case "playbook": return `<h3 style="font-family:var(--serif);font-size:22px;margin:6px 0 10px">What's happening?</h3><div class="track">${Object.entries(PLAYBOOK).map(([k, p]) =>
@@ -207,13 +265,14 @@ function block(b) {
       const anyKids = KIDS.some(k => String(S.f[k[0]] || "").trim() !== "");
       if (S.readMode && !anyKids) return "";
       return `<div class="kids${anyKids ? "" : " is-empty"}" data-block-title="For the kids"><div class="big">${KIDS.map(([id, e, t, ph]) => {
+        const rf = rField([id, t, ph]);
         const raw = S.f[id] ?? "";
         const empty = !String(raw).trim();
         if (S.readMode && empty) return "";
-        return `<div class="k${empty ? " is-empty" : ""}" data-fwrap="${esc(id)}"><div class="emoji">${e}</div><h4>${esc(t)}</h4>${
+        return `<div class="k${empty ? " is-empty" : ""}" data-fwrap="${esc(id)}"><div class="emoji">${e}</div><h4>${esc(rf[1])}</h4>${
           S.readMode
             ? `<div class="ro-val area">${linkify(raw)}</div>`
-            : `<textarea data-f="${esc(id)}" placeholder="${esc(ph)}">${esc(raw)}</textarea><div class="print-val" data-pv="${esc(id)}">${esc(raw)}</div>`
+            : `<textarea data-f="${esc(id)}" placeholder="${esc(rf[2])}">${esc(raw)}</textarea><div class="print-val" data-pv="${esc(id)}">${esc(raw)}</div>`
         }</div>`;
       }).join("")}</div></div>`;
     }
@@ -222,7 +281,8 @@ function block(b) {
 
 function playbook() {
   return Object.entries(PLAYBOOK).map(([k, p]) => `<div class="${S.track === k ? "" : "phase-hidden"}" data-label="${esc(p.label)}" style="${S.track === k ? "" : "display:none"}">
-    ${p.phases.map(ph => `<div class="phase"><div class="when">${esc(ph.when)}</div><div class="steps">${ph.steps.map(s => {
+    ${p.phases.map(ph => `<div class="phase"><div class="when">${esc(ph.when)}</div><div class="steps">${ph.steps.map(rawS => {
+      const s = rStep(rawS);
       const refHtml = s.ref
         ? (s.refTab
           ? `<button type="button" class="ref-link" data-jump-tab="${esc(s.refTab)}" data-jump-block="${esc(s.refBlock || "")}">↳ ${esc(s.ref)}</button>`
@@ -263,6 +323,37 @@ function extras(tab) {
   return html;
 }
 
+function loadDemo() {
+  if (typeof DEMO_FAMILIES === "undefined") return;
+  const src = DEMO_FAMILIES[S.region] || DEMO_FAMILIES.default;
+  const keepRegion = S.region;
+  const keepLarge = S.largeText, keepHc = S.highContrast;
+  S = {
+    region: keepRegion,
+    largeText: keepLarge,
+    highContrast: keepHc,
+    isDemo: true,
+    track: src.track || "hurt",
+    tab: "start",
+    f: { ...(src.f || {}), ...(src.f_extra_patch || {}) },
+    lists: JSON.parse(JSON.stringify(src.lists || {})),
+    checks: {},
+    fireDrill: {},
+    photos: [],
+    customTabs: JSON.parse(JSON.stringify(src.customTabs || [])),
+    extra: JSON.parse(JSON.stringify(src.extra || {}))
+  };
+  norm(); save(true, false); render();
+  toast("Sample family loaded — explore freely!");
+}
+
+function clearDemo() {
+  const keepRegion = S.region, keepLarge = S.largeText, keepHc = S.highContrast;
+  S = { region: keepRegion, largeText: keepLarge, highContrast: keepHc, tab: "start" };
+  norm(); save(true, false); render();
+  toast("Cleared sample — ready for your family");
+}
+
 function render() {
   document.body.classList.toggle("read-mode", !!S.readMode);
   document.body.classList.toggle("large-text", !!S.largeText);
@@ -271,6 +362,25 @@ function render() {
   if (largeBtn) largeBtn.classList.toggle("on", !!S.largeText);
   const hcBtn = document.querySelector('[data-act="toggleContrast"]');
   if (hcBtn) hcBtn.classList.toggle("on", !!S.highContrast);
+  const lockBtn = document.querySelector('[data-act="lockBrowser"]');
+  if (lockBtn) {
+    lockBtn.classList.toggle("on", !!browserLockPass);
+    lockBtn.textContent = browserLockPass ? "Locked ✓" : "Lock";
+  }
+  const rSel = $("#regionSel");
+  if (rSel && typeof REGIONS !== "undefined") {
+    rSel.innerHTML = Object.entries(REGIONS).map(([k, v]) => `<option value="${esc(k)}"${S.region === k ? " selected" : ""}>${esc(v.label)}</option>`).join("");
+  }
+  const db = $("#demoBanner");
+  if (db) {
+    if (S.isDemo) {
+      db.innerHTML = `<div class="demo-banner active"><span><b>Sample family preview (${esc(getRegion().label)})</b> — explore Read mode, Search, Readiness Audit, or Caregiver Sheet. Nothing here is saved as yours.</span><div class="db-acts"><button type="button" class="primary" data-act="clearDemo">Clear sample &amp; start my guide</button></div></div>`;
+    } else if (!hasAnyContent() && !S.readMode && !S.dismissDemo && typeof DEMO_FAMILIES !== "undefined") {
+      db.innerHTML = `<div class="demo-banner"><span><b>New here?</b> Preview how the guide looks filled out (including US + India / H-1B examples), or start typing below.</span><div class="db-acts"><button type="button" class="primary" data-act="loadDemo">Load sample family</button><button type="button" data-act="dismissDemo">Dismiss</button></div></div>`;
+    } else {
+      db.innerHTML = "";
+    }
+  }
 
   const tabs = allTabs();
   $("#tabs").innerHTML = tabs.map(t => `<button type="button" data-tab="${esc(t.id)}" class="${S.tab === t.id ? "on" : ""} ${t.custom ? "custom" : ""}">${esc(t.label)}</button>`).join("")
@@ -300,6 +410,7 @@ function computeAudit() {
   const f = id => String(S.f[id] || "").trim();
   const rowsOf = id => (S.lists[id] || []).filter(r => rowHasFilledValue(id, r));
   const items = [];
+  const reg = getRegion();
 
   const missCore = [!f("q_first") && "First person to call", !f("q_binder") && "Where papers live"].filter(Boolean);
   items.push(missCore.length
@@ -315,7 +426,7 @@ function computeAudit() {
   }
 
   const accts = rowsOf("accounts");
-  const hasJoint = accts.some(r => /joint|both|shared|&|\band\b/i.test(String(r.own || "")));
+  const hasJoint = accts.some(r => /joint|both|shared|either|survivor|&|\band\b/i.test(String(r.own || "")));
   if (!accts.length) {
     items.push({ id: "joint_bank", sev: "med", title: "No bank accounts listed yet", detail: "List checking/savings (last 4 digits) and mark which ones are Joint.", tab: "money", block: "accounts" });
   } else if (!hasJoint) {
@@ -325,16 +436,17 @@ function computeAudit() {
   }
 
   const invRows = rowsOf("invest");
-  const lifeRows = rowsOf("insurance").filter(r => /life/i.test(String(r.type || "")));
+  const lifeRows = rowsOf("insurance").filter(r => /life|term/i.test(String(r.type || "")));
   const invMiss = invRows.filter(r => !String(r.benef || "").trim()).length;
   const lifeMiss = lifeRows.filter(r => !String(r.benef || "").trim()).length;
   const totalBenefMiss = invMiss + lifeMiss;
+  const indiaNote = reg.indiaNotes ? " In India, bank/demat nominees are custodians—ensure your will/legal heirs match." : "";
   if (totalBenefMiss > 0) {
-    items.push({ id: "beneficiaries", sev: "high", title: `${totalBenefMiss} retirement/life-insurance entry missing a Beneficiary`, detail: "Named beneficiaries override your will—record who is named on each.", tab: "money", block: invMiss > 0 ? "invest" : "insurance" });
+    items.push({ id: "beneficiaries", sev: "high", title: `${totalBenefMiss} retirement/life-insurance entry missing a Beneficiary`, detail: "Named beneficiaries override your will—record who is named on each." + indiaNote, tab: "money", block: invMiss > 0 ? "invest" : "insurance" });
   } else if (!invRows.length && !lifeRows.length) {
-    items.push({ id: "beneficiaries", sev: "med", title: "No life insurance or retirement accounts listed", detail: "Record policies and retirement accounts along with named beneficiaries.", tab: "money", block: "insurance" });
+    items.push({ id: "beneficiaries", sev: "med", title: "No life insurance or retirement accounts listed", detail: "Record policies and retirement accounts along with named beneficiaries." + indiaNote, tab: "money", block: "insurance" });
   } else {
-    items.push({ id: "beneficiaries", sev: "ok", title: "Beneficiaries recorded", detail: "Listed life insurance & retirement entries name a beneficiary." });
+    items.push({ id: "beneficiaries", sev: "ok", title: "Beneficiaries recorded", detail: "Listed life insurance & retirement entries name a beneficiary." + indiaNote });
   }
 
   const missLegal = [!f("d_will") && "Will / trust", !f("d_hcd") && "Healthcare directive", !f("d_fpoa") && "Financial POA"].filter(Boolean);
@@ -348,6 +460,15 @@ function computeAudit() {
   items.push((!f("d_pm") && !f("d_legacy"))
     ? { id: "digital_legacy", sev: "med", title: "No password manager or legacy contact noted", detail: "Set up Password Manager emergency access or Apple/Google Legacy Contacts.", tab: "docs", block: "Getting into things", field: "d_pm" }
     : { id: "digital_legacy", sev: "ok", title: "Digital legacy / password access set", detail: "Password manager or platform legacy contacts are documented." });
+
+  if (reg.crossBorder) {
+    const hasVisaInfo = S.customTabs.some(t => /visa|immig|cross|india|nri/i.test(t.label + " " + t.title))
+      || /i-797|i-140|h-1b|h-4|oci|visa/i.test(JSON.stringify(S.f) + JSON.stringify(S.lists.doclocs || []));
+    const hasImmigPro = (S.lists.pros || []).some(r => /immig|visa|cross/i.test(JSON.stringify(r)));
+    items.push((hasVisaInfo && hasImmigPro)
+      ? { id: "cross_border", sev: "ok", title: "Cross-border & visa readiness covered", detail: "Visa papers, separate country planning, and immigration counsel are noted." }
+      : { id: "cross_border", sev: "high", title: "Cross-border / Visa readiness incomplete", detail: "Record visa filings (I-797/I-94/I-140), immigration attorney, local temporary guardian, and separate country wills.", tab: "docs", block: "doclocs" });
+  }
 
   const backupAgeDays = S.lastBackup ? (Date.now() - new Date(S.lastBackup)) / 864e5 : Infinity;
   if (hasAnyContent() && !S.lastBackup) {
@@ -604,6 +725,14 @@ document.addEventListener("click", e => {
   if (a) { e.preventDefault(); PLAYBOOK[S.track].phases.flatMap(p => p.steps).forEach(s => delete S.checks[s.id]); save(true); $("#pb").innerHTML = playbook(); trackProgress(); return; }
   const rtl = e.target.closest("[data-act='toggleReadLink']");
   if (rtl) { e.preventDefault(); S.readMode = !S.readMode; save(true, false); render(); return; }
+  if (e.target.tagName === "IMG" && e.target.dataset.zoom) {
+    const ph = (S.photos || []).find(p => p.id === e.target.dataset.zoom);
+    if (ph) {
+      openDlg(`<h3>${esc(ph.label)}</h3><img src="${esc(ph.dataUrl)}" alt="${esc(ph.label)}" style="width:100%;max-height:70vh;object-fit:contain;border-radius:4px;border:1px solid var(--rule)"><div class="btns"><button type="button" class="btn primary" id="cancelDlg">Close</button></div>`, true);
+      $("#cancelDlg").onclick = () => $("#dlg").close();
+    }
+    return;
+  }
 
   const d = e.target.closest("button")?.dataset; if (!d) return;
   if (d.tab) { S.tab = d.tab; save(true, false); render(); scrollTo({ top: 0, behavior: "smooth" }); }
@@ -625,6 +754,15 @@ document.addEventListener("click", e => {
   if (d.act === "toggleRead") { S.readMode = !S.readMode; save(true, false); render(); }
   if (d.act === "toggleLarge") { S.largeText = !S.largeText; save(true, false); render(); }
   if (d.act === "toggleContrast") { S.highContrast = !S.highContrast; save(true, false); render(); }
+  if (d.act === "lockBrowser") lockBrowserDialog();
+  if (d.act === "loadDemo") loadDemo();
+  if (d.act === "clearDemo") clearDemo();
+  if (d.act === "dismissDemo") { S.dismissDemo = true; save(true, false); render(); }
+  if (d.act === "addPhoto") addPhotoDialog();
+  if (d.delphoto) {
+    const pid = d.delphoto;
+    confirmDlg("Remove this photo from the guide?", () => { S.photos = (S.photos || []).filter(p => p.id !== pid); save(true); render(); });
+  }
   if (d.act === "hideEss") { S.hideEssentials = true; save(true, false); render(); }
   if (d.act === "showEss") { S.hideEssentials = false; save(true, false); render(); }
   if (d.act === "reviewed") { S.reviewed = new Date().toISOString(); save(true); toast("Marked as reviewed"); }
@@ -634,6 +772,15 @@ document.addEventListener("click", e => {
   if (d.act === "backup") backupDialog();
   if (d.act === "restore") restoreDialog();
   if (d.act === "project") projectDialog();
+});
+
+document.addEventListener("change", e => {
+  if (e.target.id === "regionSel") {
+    S.region = e.target.value;
+    save(true, false);
+    render();
+    toast("Region: " + getRegion().label);
+  }
 });
 
 function relist(id) {
@@ -854,7 +1001,7 @@ function renderCaregiverSheet() {
     <p class="sheet-sub">Keep on the fridge or hand to anyone watching the kids or house. Updated ${new Date().toLocaleDateString()}.</p>
     <div class="sheet-grid">
       <div class="sheet-box full">
-        <h3>Home Address (read this to 911)</h3>
+        <h3>Home Address (read this to ${esc(getRegion().emergency)})</h3>
         <div class="sheet-giant">${esc(f("k_home") || "Not filled in yet — add under For the kids")}</div>
         ${f("k_safe") ? `<p><b>Family safe word:</b> ${esc(f("k_safe"))}</p>` : ""}
       </div>
@@ -965,8 +1112,143 @@ async function keyFrom(pass, salt) {
   return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 250000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
 }
 
+/* ---------- Diceware passphrase & GF(256) Shamir 2-of-3 split ---------- */
+function generatePassphrase(wordCount = 5) {
+  const words = (typeof DICE_WORDS !== "undefined" && DICE_WORDS.length) ? DICE_WORDS : ["maple", "river", "lantern", "cedar", "orbit"];
+  const buf = new Uint32Array(wordCount);
+  if (window.crypto?.getRandomValues) crypto.getRandomValues(buf);
+  else for (let i = 0; i < wordCount; i++) buf[i] = Math.floor(Math.random() * 0xffffffff);
+  return Array.from(buf, n => words[n % words.length]).join("-");
+}
+function gfMul(a, b) {
+  let p = 0;
+  for (let i = 0; i < 8; i++) {
+    if (b & 1) p ^= a;
+    const hi = a & 0x80;
+    a = (a << 1) & 0xff;
+    if (hi) a ^= 0x1b;
+    b >>= 1;
+  }
+  return p;
+}
+function gfPow(a, e) {
+  let res = 1, base = a;
+  while (e > 0) {
+    if (e & 1) res = gfMul(res, base);
+    base = gfMul(base, base);
+    e >>= 1;
+  }
+  return res;
+}
+const gfDiv = (a, b) => {
+  if (!b) throw new Error("Division by zero in GF(256)");
+  return a ? gfMul(a, gfPow(b, 254)) : 0;
+};
+function sssSplit2of3(secretStr) {
+  const bytes = enc.encode(secretStr);
+  if (!bytes.length) throw new Error("Empty secret");
+  const rand = new Uint8Array(bytes.length);
+  if (window.crypto?.getRandomValues) crypto.getRandomValues(rand);
+  else for (let i = 0; i < rand.length; i++) rand[i] = Math.floor(Math.random() * 256);
+  return [1, 2, 3].map(x => {
+    let hex = "";
+    for (let i = 0; i < bytes.length; i++) {
+      const y = bytes[i] ^ gfMul(rand[i], x);
+      hex += y.toString(16).padStart(2, "0").toUpperCase();
+    }
+    return `FFG-${x}-${hex.replace(/(.{4})/g, "$1-").replace(/-$/, "")}`;
+  });
+}
+function parseSssShare(str) {
+  const m = String(str || "").trim().toUpperCase().match(/^FFG-([123])-(.+)$/);
+  if (!m) throw new Error("Invalid recovery card format (expected FFG-1-...)");
+  const hex = m[2].replace(/[^0-9A-F]/g, "");
+  if (!hex.length || hex.length % 2 !== 0) throw new Error("Invalid recovery card hex");
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return { x: Number(m[1]), bytes };
+}
+function sssCombine2of3(shareA, shareB) {
+  const a = parseSssShare(shareA), b = parseSssShare(shareB);
+  if (a.x === b.x) throw new Error("Use two different cards (e.g. Card 1 and Card 2)");
+  if (a.bytes.length !== b.bytes.length) throw new Error("Recovery cards don't match");
+  const out = new Uint8Array(a.bytes.length);
+  const dx = a.x ^ b.x;
+  const l1 = gfDiv(b.x, dx), l2 = gfDiv(a.x, dx);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = gfMul(a.bytes[i], l1) ^ gfMul(b.bytes[i], l2);
+  }
+  return dec.decode(out);
+}
+function renderRecoveryCards(shares) {
+  const holders = ["Card 1 of 3 — Spouse / Partner", "Card 2 of 3 — Home Fireproof Safe", "Card 3 of 3 — Trusted Sibling or Attorney"];
+  $("#printSheet").innerHTML = `<div class="sheet">
+    <h1>2-of-3 Recovery Cards — Our Family Field Guide</h1>
+    <p class="sheet-sub">Cut apart and store in 3 separate places. Any <b>2 cards together</b> unlock your backup; 1 card alone reveals nothing. Created ${new Date().toLocaleDateString()}.</p>
+    <div class="sss-cards">${shares.map((sh, i) => `<div class="sss-card">
+      <h3>${holders[i]}</h3>
+      <p style="font-size:12.5px;margin:2px 0">Pair this card with any other card to unlock <code>family-field-guide-*.html</code>.</p>
+      <code>${esc(sh)}</code>
+    </div>`).join("")}</div>
+  </div>`;
+}
+
+/* ---------- Photo snippets (compressed locally & encrypted with S) ---------- */
+let pendingPhotoLabel = "";
+function addPhotoDialog() {
+  if ((S.photos || []).length >= 10) return toast("Maximum 10 photos per guide");
+  const chips = ["Water shut-off", "Gas shut-off", "Breaker panel", "Health insurance card", "Safe / keys"];
+  openDlg(`<h3>Add reference photo</h3>
+    <p class="hint">Compressed locally in your browser (~80–120 KB) and encrypted inside your backups.</p>
+    <label class="f"><span>Label</span><input id="phLbl" placeholder="e.g. Water shut-off valve"></label>
+    <div class="photo-chips">${chips.map(c => `<button type="button" class="pchip" data-pc="${esc(c)}">${esc(c)}</button>`).join("")}</div>
+    ${btns("Choose image")}`);
+  $("#dlgForm").querySelectorAll("[data-pc]").forEach(b => { b.onclick = () => { $("#phLbl").value = b.dataset.pc; }; });
+  onGo(() => {
+    const lbl = $("#phLbl").value.trim();
+    if (!lbl) return toast("Give the photo a label");
+    pendingPhotoLabel = lbl;
+    $("#dlg").close();
+    $("#photoIn").click();
+  });
+}
+function compressPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const max = 1000;
+        let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+        if (w > max || h > max) {
+          if (w >= h) { h = Math.round(h * max / w); w = max; }
+          else { w = Math.round(w * max / h); h = max; }
+        }
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        cv.getContext("2d").drawImage(img, 0, 0, w, h);
+        const dataUrl = cv.toDataURL("image/jpeg", 0.72);
+        URL.revokeObjectURL(url);
+        resolve(dataUrl);
+      } catch (err) { URL.revokeObjectURL(url); reject(err); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read image")); };
+    img.src = url;
+  });
+}
+$("#photoIn").onchange = async e => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  try {
+    const dataUrl = await compressPhoto(file);
+    S.photos ??= [];
+    S.photos.push({ id: uid("ph"), label: pendingPhotoLabel || "Reference photo", dataUrl });
+    save(true); render(); toast("Photo added");
+  } catch { toast("Could not process image"); }
+};
+
 function buildStandaloneHtml(pkg) {
-  const schemaData = { TABS, PLAYBOOK, SCRIPTS, GLANCE, KIDS };
+  const schemaData = { TABS, PLAYBOOK, SCRIPTS, GLANCE, KIDS, REGIONS: typeof REGIONS !== "undefined" ? REGIONS : {} };
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -979,11 +1261,12 @@ function buildStandaloneHtml(pkg) {
 body.large-text{font-size:18px;line-height:1.55}body.large-text .val,body.large-text input{font-size:17px}
 body.high-contrast{--paper:#ffffff;--paper2:#f0f0f0;--card:#ffffff;--ink:#0b1410;--ink2:#1c2822;--mute:#3a4440;--rule:#333333;--tomato:#b32d0f;--sun:#c97b00;--sky:#0b4f6c}
 body.high-contrast .card{border-width:2px;box-shadow:none}
-.wrap{max-width:980px;margin:0 auto}.lock{max-width:460px;margin:8vh auto;background:var(--card);border:2px solid var(--ink);border-radius:8px;padding:24px;box-shadow:6px 6px 0 var(--ink)}
+.wrap{max-width:980px;margin:0 auto}.lock{max-width:480px;margin:6vh auto;background:var(--card);border:2px solid var(--ink);border-radius:8px;padding:24px;box-shadow:6px 6px 0 var(--ink)}
 h1,h2,h3{font-family:var(--serif);margin-top:0}h1 em{color:var(--tomato)}
-input[type=password]{width:100%;font:16px var(--sans);padding:9px 10px;border:1.5px solid var(--ink);border-radius:4px;margin:6px 0 12px}
+input[type=password],.cardin{width:100%;font:15px var(--sans);padding:9px 10px;border:1.5px solid var(--ink);border-radius:4px;margin:6px 0 10px}
 .btn{font:600 12.5px var(--sans);padding:7px 13px;border-radius:999px;border:1.5px solid var(--ink);background:var(--card);color:var(--ink);cursor:pointer}
 .btn.primary{background:var(--ink);color:var(--paper)}.btn.on{background:var(--sky);border-color:var(--sky);color:#fff}
+.linkbtn{background:none;border:none;color:var(--sky);font:600 13px var(--sans);text-decoration:underline;cursor:pointer;padding:0;margin-top:8px}
 .err{color:var(--tomato);font-size:13px;min-height:18px;margin:4px 0}.status{font-size:12.5px;color:var(--sky);font-weight:600}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:14px}
 .sbox{position:relative;margin-bottom:14px}.sbox input{width:100%;background:var(--card);border:1.5px solid var(--rule);border-radius:999px;padding:8px 15px;font:14px var(--sans);color:var(--ink)}
@@ -1007,6 +1290,8 @@ input[type=password]{width:100%;font:16px var(--sans);padding:9px 10px;border:1.
 .rlink{font-family:var(--mono);font-size:12px;color:var(--sky);background:none;border:none;padding:3px 0 0;cursor:pointer;text-align:left;display:block}
 .rlink:hover{text-decoration:underline}
 .script{border-left:3px solid var(--sun);padding:6px 12px;background:#fffaf0;margin-bottom:8px}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}.pcard{border:1px solid var(--rule);padding:7px;border-radius:4px;background:var(--paper)}
+.pcard img{width:100%;height:120px;object-fit:cover;border-radius:3px;cursor:zoom-in}
 #sheetOnly{display:none;max-width:780px;margin:0 auto}.sgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .sboxc{border:1px solid #bbb;border-radius:4px;padding:10px 12px}.sboxc.full{grid-column:1/-1}.sboxc h3{margin:0 0 6px;font-size:16px;border-bottom:1px solid #ddd;padding-bottom:3px}
 @media print{.tabs,.bar .acts,.track,.sbox,.rx,.addbtn{display:none!important}.panel{display:block!important;break-before:page}.panel:first-of-type{break-before:auto}
@@ -1018,10 +1303,19 @@ body.sheet-mode #app{display:none!important}body.sheet-mode #sheetOnly{display:b
   <h1>Our Family <em>Field Guide</em></h1>
   <p style="color:var(--ink2);font-size:14px">This standalone offline copy is locked with a passphrase. Nothing is sent anywhere.</p>
   <form id="uform">
-    <label class="lbl">Passphrase</label>
-    <input type="password" id="upw" autofocus required>
+    <div id="pwMode">
+      <label class="lbl">Passphrase</label>
+      <input type="password" id="upw" autofocus>
+    </div>
+    <div id="sssMode" hidden>
+      <label class="lbl">Recovery Card A (FFG-1-…)</label>
+      <input class="cardin" id="sc1" placeholder="FFG-1-...">
+      <label class="lbl">Recovery Card B (FFG-2-… or FFG-3-…)</label>
+      <input class="cardin" id="sc2" placeholder="FFG-2-...">
+    </div>
     <div class="err" id="uerr"></div>
     <button class="btn primary" type="submit">Unlock guide</button>
+    <div><button type="button" class="linkbtn" id="togSss">Unlock with 2 recovery cards instead</button></div>
   </form>
 </div>
 <div id="app" class="wrap" hidden></div>
@@ -1040,6 +1334,11 @@ function b64(buf) {
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(bin);
 }
+function gfMul(a,b){let p=0;for(let i=0;i<8;i++){if(b&1)p^=a;const h=a&0x80;a=(a<<1)&0xff;if(h)a^=0x1b;b>>=1;}return p;}
+function gfPow(a,e){let r=1,b=a;while(e>0){if(e&1)r=gfMul(r,b);b=gfMul(b,b);e>>=1;}return r;}
+const gfDiv = (a,b) => a ? gfMul(a, gfPow(b, 254)) : 0;
+function parseShare(s){const m=String(s||"").trim().toUpperCase().match(/^FFG-([123])-(.+)$/);if(!m)throw 0;const h=m[2].replace(/[^0-9A-F]/g,"");if(!h.length||h.length%2)throw 0;const b=new Uint8Array(h.length/2);for(let i=0;i<b.length;i++)b[i]=parseInt(h.slice(i*2,i*2+2),16);return{x:+m[1],bytes:b};}
+function combine2of3(sa,sb){const a=parseShare(sa),b=parseShare(sb);if(a.x===b.x||a.bytes.length!==b.bytes.length)throw 0;const out=new Uint8Array(a.bytes.length),dx=a.x^b.x,l1=gfDiv(b.x,dx),l2=gfDiv(a.x,dx);for(let i=0;i<out.length;i++)out[i]=gfMul(a.bytes[i],l1)^gfMul(b.bytes[i],l2);return new TextDecoder().decode(out);}
 const linkify = v => esc(v).replace(/(https?:\\/\\/[^\\s<>"]+)|([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})|(\\+?\\d[\\d\\s().-]{6,}\\d)/g, (m,u,e,p) => {
   if (u) { let c = u, tr = ""; const tm = c.match(/[.,;:!?)]+$/); if (tm) { c = c.slice(0,-tm[0].length); tr = tm[0]; } return '<a href="'+c+'" target="_blank" rel="noopener noreferrer">'+c+'</a>'+tr; }
   if (e) return '<a href="mailto:'+e+'">'+e+'</a>';
@@ -1060,11 +1359,21 @@ function isRowFilled(id, r) {
   }
   return true;
 }
-let unlockedPass = "";
+let unlockedPass = "", useSss = false;
+document.getElementById("togSss").onclick = () => {
+  useSss = !useSss;
+  document.getElementById("pwMode").hidden = useSss;
+  document.getElementById("sssMode").hidden = !useSss;
+  document.getElementById("togSss").textContent = useSss ? "Use passphrase instead" : "Unlock with 2 recovery cards instead";
+};
 document.getElementById("uform").onsubmit = async ev => {
   ev.preventDefault();
   const err = document.getElementById("uerr"); err.textContent = "";
-  const pass = document.getElementById("upw").value;
+  let pass = "";
+  try {
+    pass = useSss ? combine2of3(document.getElementById("sc1").value, document.getElementById("sc2").value) : document.getElementById("upw").value;
+    if (!pass) throw 0;
+  } catch { err.textContent = "Check that both recovery cards are valid and different."; return; }
   try {
     const enc = new TextEncoder(), dec = new TextDecoder();
     const base = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
@@ -1076,11 +1385,14 @@ document.getElementById("uform").onsubmit = async ev => {
     document.getElementById("gate").hidden = true;
     const app = document.getElementById("app"); app.hidden = false;
     renderAll(app, S);
-  } catch { err.textContent = "Wrong passphrase or unsupported browser context."; }
+  } catch { err.textContent = "Wrong passphrase/cards or unsupported browser context."; }
 };
 function renderAll(root, S) {
-  S.f = S.f || {}; S.lists = S.lists || {}; S.checks = S.checks || {}; S.extra = S.extra || {}; S.customTabs = S.customTabs || [];
+  S.f = S.f || {}; S.lists = S.lists || {}; S.checks = S.checks || {}; S.extra = S.extra || {}; S.customTabs = S.customTabs || []; S.photos = S.photos || [];
   if (!S.lists.call_log) S.lists.call_log = [{}];
+  const reg = (SC.REGIONS && SC.REGIONS[S.region]) || { emergency:"911", fieldOverrides:{}, stepOverrides:{} };
+  const rf = f => { const ov = reg.fieldOverrides?.[f[0]]; return ov ? [f[0], ov.label ?? f[1], ov.ph ?? f[2], f[3]] : f; };
+  const rs = s => { const ov = reg.stepOverrides?.[s.id]; return ov ? { ...s, t: ov.t ?? s.t, d: ov.d ?? s.d } : s; };
   let activeTab = "start", activeTrack = S.track && SC.PLAYBOOK[S.track] ? S.track : "hurt", dirty = false, statusMsg = "";
   const tabs = [...SC.TABS, ...S.customTabs.map(c => ({ ...c, blocks: [] }))];
   const fv = (label, id) => String(S.f[id] || "").trim() ? '<div><span class="lbl">'+esc(label)+'</span><div class="val">'+linkify(S.f[id])+'</div></div>' : "";
@@ -1118,7 +1430,7 @@ function renderAll(root, S) {
     SC.GLANCE.forEach(([id,l]) => { const v = String(S.f[id]||""); if (l.toLowerCase().includes(term)||v.toLowerCase().includes(term)) add("start","Start here",l,v,"glance"); });
     tabs.forEach(t => {
       (t.blocks||[]).forEach(b => {
-        if (b.type === "fields") b.fields.forEach(([id,l]) => { const v = String(S.f[id]||""); if (l.toLowerCase().includes(term)||v.toLowerCase().includes(term)||b.title.toLowerCase().includes(term)) add(t.id,t.label,l,v||b.title,b.title); });
+        if (b.type === "fields") b.fields.forEach(f => { const x = rf(f); const v = String(S.f[x[0]]||""); if (x[1].toLowerCase().includes(term)||v.toLowerCase().includes(term)||b.title.toLowerCase().includes(term)) add(t.id,t.label,x[1],v||b.title,b.title); });
         if (b.type === "list") {
           const mr = (S.lists[b.id]||[]).find(r => isRowFilled(b.id,r) && Object.values(r).some(v => String(v||"").toLowerCase().includes(term)));
           if (b.title.toLowerCase().includes(term)||mr) add(t.id,t.label,b.title,mr?Object.values(mr).filter(Boolean).join(" · "):"Table",b.id);
@@ -1130,7 +1442,7 @@ function renderAll(root, S) {
       });
     });
     SC.KIDS.forEach(([id,,l]) => { const v = String(S.f[id]||""); if (l.toLowerCase().includes(term)||v.toLowerCase().includes(term)) add("kids","For the kids",l,v,"kids_card"); });
-    Object.entries(SC.PLAYBOOK).forEach(([tk,p]) => p.phases.forEach(ph => ph.steps.forEach(s => { if (s.t.toLowerCase().includes(term)||s.d.toLowerCase().includes(term)) add("start","Playbook",s.t,s.d,s.id,tk); })));
+    Object.entries(SC.PLAYBOOK).forEach(([tk,p]) => p.phases.forEach(ph => ph.steps.forEach(raw => { const s = rs(raw); if (s.t.toLowerCase().includes(term)||s.d.toLowerCase().includes(term)) add("start","Playbook",s.t,s.d,s.id,tk); })));
     return out;
   }
   function draw() {
@@ -1149,16 +1461,17 @@ function renderAll(root, S) {
       + tabs.map(t => {
         let html = "";
         if (t.id === "start") {
-          const g = SC.GLANCE.map(([id,l]) => fv(l, id)).join("");
+          const g = SC.GLANCE.map(x => rf(x)).map(([id,l]) => fv(l, id)).join("");
           if (g) html += '<div class="glance" data-bid="glance"><h3>If you read nothing else</h3><div class="grid2">'+g+'</div></div>';
           const p = SC.PLAYBOOK[activeTrack];
           html += '<div class="card"><h3>What\\'s happening?</h3><div class="track">'+Object.entries(SC.PLAYBOOK).map(([k,v]) => '<button type="button" data-tr="'+esc(k)+'" class="'+(activeTrack===k?"on":"")+'">'+esc(v.label)+'</button>').join("")+'</div>'
-            + p.phases.map(ph => '<h4>'+esc(ph.when)+'</h4>'+ph.steps.map(s => '<div class="step '+(S.checks[s.id]?"done":"")+'" data-sid="'+esc(s.id)+'"><input type="checkbox" data-ck="'+esc(s.id)+'" '+(S.checks[s.id]?"checked":"")+'><div><div class="st"><b>'+esc(s.t)+'</b></div><div style="font-size:13.5px;color:var(--ink2)">'+esc(s.d)+'</div>'+(s.refTab?'<button type="button" class="rlink" data-jt="'+esc(s.refTab)+'" data-jb="'+esc(s.refBlock||"")+'">↳ '+esc(s.ref)+'</button>':"")+'</div></div>').join("")).join("")+'</div>';
+            + p.phases.map(ph => '<h4>'+esc(ph.when)+'</h4>'+ph.steps.map(raw => { const s = rs(raw); return '<div class="step '+(S.checks[s.id]?"done":"")+'" data-sid="'+esc(s.id)+'"><input type="checkbox" data-ck="'+esc(s.id)+'" '+(S.checks[s.id]?"checked":"")+'><div><div class="st"><b>'+esc(s.t)+'</b></div><div style="font-size:13.5px;color:var(--ink2)">'+esc(s.d)+'</div>'+(s.refTab?'<button type="button" class="rlink" data-jt="'+esc(s.refTab)+'" data-jb="'+esc(s.refBlock||"")+'">↳ '+esc(s.ref)+'</button>':"")+'</div></div>'; }).join("")).join("")+'</div>';
           html += callLogHtml();
         }
         (t.blocks || []).forEach(b => {
-          if (b.type === "fields") { const fs = b.fields.map(([id,l]) => fv(l, id)).join(""); if (fs) html += '<div class="card" data-btitle="'+esc(b.title)+'"><h3>'+esc(b.title)+'</h3><div class="grid2">'+fs+'</div></div>'; }
+          if (b.type === "fields") { const fs = b.fields.map(f => rf(f)).map(([id,l]) => fv(l, id)).join(""); if (fs) html += '<div class="card" data-btitle="'+esc(b.title)+'"><h3>'+esc(b.title)+'</h3><div class="grid2">'+fs+'</div></div>'; }
           if (b.type === "list" && b.id !== "call_log") html += listHtml(b.title, b.id, b.cols);
+          if (b.type === "photos" && S.photos.length) html += '<div class="card" data-bid="visual_refs" data-btitle="Visual reference photos"><h3>'+esc(b.title)+'</h3><div class="pgrid">'+S.photos.map(ph => '<div class="pcard"><img src="'+esc(ph.dataUrl)+'" alt="'+esc(ph.label)+'" onclick="window.open(this.src)"><div style="font-size:12.5px;font-weight:600;margin-top:4px">'+esc(ph.label)+'</div></div>').join("")+'</div></div>';
           if (b.type === "scripts") html += '<div class="card" data-btitle="What to say"><h3>What to say</h3>'+SC.SCRIPTS.map(([st,sb]) => '<div class="script"><b>'+esc(st)+'</b><div><i>'+esc(sb)+'</i></div></div>').join("")+'</div>';
           if (b.type === "letter" && String(S.f.letter||"").trim()) html += '<div class="card" data-btitle="A note to you"><h3>A note to you</h3><div class="val" style="font-family:var(--serif);font-size:17px">'+linkify(S.f.letter)+'</div></div>';
           if (b.type === "kids") { const ks = SC.KIDS.map(([id,em,l]) => fv(em+" "+l, id)).join(""); if (ks) html += '<div class="card" data-bid="kids_card"><div class="grid2">'+ks+'</div></div>'; }
@@ -1183,7 +1496,7 @@ function renderAll(root, S) {
       const f = id => String(S.f[id]||"").trim();
       const rowsOf = id => (S.lists[id]||[]).filter(r => isRowFilled(id,r));
       document.getElementById("sheetOnly").innerHTML = '<h1>Emergency Caregiver &amp; Fridge Sheet</h1><p style="font-size:13px;color:#444">Updated '+new Date().toLocaleDateString()+'</p><div class="sgrid">'
-        + '<div class="sboxc full"><h3>Home Address (for 911)</h3><div style="font-size:18px;font-weight:700">'+esc(f("k_home")||"Not filled")+'</div>'+(f("k_safe")?'<p><b>Safe word:</b> '+esc(f("k_safe"))+'</p>':"")+'</div>'
+        + '<div class="sboxc full"><h3>Home Address (read this to '+esc(reg.emergency||"911")+')</h3><div style="font-size:18px;font-weight:700">'+esc(f("k_home")||"Not filled")+'</div>'+(f("k_safe")?'<p><b>Safe word:</b> '+esc(f("k_safe"))+'</p>':"")+'</div>'
         + '<div class="sboxc"><h3>Who to Call First</h3><ul>'+rowsOf("first").map(r=>'<li><b>'+esc(r.name||r.rel||"Contact")+'</b>: '+esc(r.phone||"")+'</li>').join("")+'</ul>'+(f("q_first")?'<p>'+esc(f("q_first"))+'</p>':"")+'</div>'
         + '<div class="sboxc"><h3>Kids &amp; Health</h3><ul>'+rowsOf("kids_info").map(r=>'<li><b>'+esc(r.child||"Child")+'</b> '+esc(r.pickup||"")+' '+esc(r.comfort||"")+'</li>').join("")+rowsOf("fam_health").map(r=>'<li><b>'+esc(r.name||"")+'</b> '+esc(r.allergy||"")+' '+esc(r.meds||"")+'</li>').join("")+'</ul></div>'
         + '<div class="sboxc"><h3>House Shut-offs</h3><ul>'+[["Water",f("hk_water")],["Gas",f("hk_gas")],["Breaker",f("hk_breaker")],["Keys",f("hk_spare")]].filter(([,v])=>v).map(([k,v])=>'<li><b>'+k+':</b> '+esc(v)+'</li>').join("")+'</ul></div>'
@@ -1240,17 +1553,37 @@ function backupDialog() {
   openDlg(`<h3>Save a locked backup</h3>
     <p class="hint">Choose a passphrase your spouse knows (or keep it with your will). Without it, the file can't be opened. Don't upload backups to GitHub.</p>
     <label class="f"><span>Passphrase (at least 8 characters)</span><input type="password" id="pw1" required></label>
+    <div class="pass-tools">
+      <button type="button" id="genPw">Generate memorable passphrase</button>
+      <button type="button" id="togPw">Show</button>
+    </div>
     <label class="f" style="margin-top:8px"><span>Type it again</span><input type="password" id="pw2" required></label>
+    <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:13.5px;cursor:pointer">
+      <input type="checkbox" id="mkSss" style="width:auto;margin-top:3px">
+      <span>Also create <b>2-of-3 Split Recovery Cards</b> (Spouse · Safe · Trusted Person). Any 2 cards unlock this backup.</span>
+    </label>
     <div class="opt-list" style="margin-top:12px">
       <label class="opt-card"><input type="radio" name="bfmt" value="html" checked><div><b>Standalone locked HTML (.html) — Recommended</b><small>One self-contained offline file your spouse can double-click in any browser, even years from now.</small></div></label>
       <label class="opt-card"><input type="radio" name="bfmt" value="json"><div><b>Encrypted JSON (.json)</b><small>Compact data file to re-open inside this app.</small></div></label>
     </div>
     ${btns("Save file")}`);
+  $("#genPw").onclick = () => {
+    const pw = generatePassphrase(5);
+    $("#pw1").value = $("#pw2").value = pw;
+    $("#pw1").type = $("#pw2").type = "text";
+    $("#togPw").textContent = "Hide";
+  };
+  $("#togPw").onclick = () => {
+    const show = $("#pw1").type === "password";
+    $("#pw1").type = $("#pw2").type = show ? "text" : "password";
+    $("#togPw").textContent = show ? "Hide" : "Show";
+  };
   onGo(async () => {
     const p = $("#pw1").value;
     if (p.length < 8) return toast("Use at least 8 characters");
     if (p !== $("#pw2").value) return toast("Passphrases don't match");
     const fmt = $("#dlgForm").querySelector('input[name="bfmt"]:checked').value;
+    const makeCards = $("#mkSss").checked;
     const now = new Date().toISOString();
     S.lastBackup = now;
     if (!S.updated) S.updated = now;
@@ -1262,11 +1595,18 @@ function backupDialog() {
     if (fmt === "html") download(`family-field-guide-${stamp}.html`, buildStandaloneHtml(pkg), "text/html");
     else download(`family-field-guide-${stamp}.json`, out, "application/json");
     save(true, false);
+    const shares = makeCards ? sssSplit2of3(p) : null;
     openDlg(`<h3>Backup ready</h3>
       <p>Your ${fmt === "html" ? "standalone locked HTML" : "encrypted JSON"} download has started. Keep the passphrase separate from the file.</p>
+      ${shares ? `<div class="sss-list">
+        <p class="hint" style="margin:0"><b>2-of-3 Split Recovery Cards:</b> store each in a different place. Any 2 unlock your backup.</p>
+        ${shares.map((sh, i) => `<div class="sss-box"><b>Card ${i + 1}:</b> ${esc(sh)}</div>`).join("")}
+        <div><button type="button" class="btn" id="prtCards">Print 3 recovery cards</button></div>
+      </div>` : ""}
       <p class="hint">If the download didn't start, copy this locked backup text into a file instead:</p>
-      <textarea readonly style="min-height:110px;font:11px var(--mono)">${esc(out)}</textarea>
-      <div class="btns"><button type="button" class="btn primary" id="doneDlg">Done</button></div>`);
+      <textarea readonly style="min-height:95px;font:11px var(--mono)">${esc(out)}</textarea>
+      <div class="btns"><button type="button" class="btn primary" id="doneDlg">Done</button></div>`, !!shares);
+    if (shares) $("#prtCards").onclick = () => { renderRecoveryCards(shares); printWithClass("print-sheet-only"); };
     $("#doneDlg").onclick = () => $("#dlg").close();
   });
 }
@@ -1360,8 +1700,8 @@ function computeMergePlan(cur, inc) {
 }
 
 function applyMerge(cur, inc, overwriteConflicts = false) {
-  cur.f ??= {}; cur.lists ??= {}; cur.checks ??= {}; cur.extra ??= {}; cur.customTabs ??= [];
-  let addedFields = 0, updatedFields = 0, addedRows = 0, addedChecks = 0, addedSections = 0;
+  cur.f ??= {}; cur.lists ??= {}; cur.checks ??= {}; cur.extra ??= {}; cur.customTabs ??= []; cur.photos ??= [];
+  let addedFields = 0, updatedFields = 0, addedRows = 0, addedChecks = 0, addedSections = 0, addedPhotos = 0;
 
   const curTabIds = new Set(cur.customTabs.map(t => t.id));
   (inc.customTabs || []).forEach(t => {
@@ -1401,6 +1741,15 @@ function applyMerge(cur, inc, overwriteConflicts = false) {
       if (!cur.lists[id].length) cur.lists[id] = [{}];
     }
   });
+  const photoKeys = new Set(cur.photos.map(p => p.label + "::" + String(p.dataUrl || "").slice(0, 64)));
+  (inc.photos || []).forEach(p => {
+    const pk = p.label + "::" + String(p.dataUrl || "").slice(0, 64);
+    if (cur.photos.length < 10 && !photoKeys.has(pk)) {
+      cur.photos.push({ ...p });
+      photoKeys.add(pk);
+      addedPhotos++;
+    }
+  });
   Object.entries(inc.checks || {}).forEach(([k, v]) => {
     if (v && !cur.checks[k]) { cur.checks[k] = true; addedChecks++; }
   });
@@ -1416,18 +1765,37 @@ function applyMerge(cur, inc, overwriteConflicts = false) {
   if (updatedFields) parts.push(`${updatedFields} updated`);
   if (addedRows) parts.push(`+${addedRows} rows`);
   if (addedSections) parts.push(`+${addedSections} sections`);
+  if (addedPhotos) parts.push(`+${addedPhotos} photos`);
   if (addedChecks) parts.push(`+${addedChecks} checks`);
   return parts.length ? `Merged (${parts.join(", ")})` : "Already up to date";
 }
 
 function promptUnlockPkg(pkg) {
   if (!hasCrypto()) return toast("Opening locked backups requires HTTPS, localhost, or Web Crypto support");
+  let useCards = false;
   openDlg(`<h3>Unlock backup</h3><p class="hint">You can merge with this device or replace what's here.</p>
-    <label class="f"><span>Passphrase</span><input type="password" id="pw" required></label>${btns("Unlock")}`);
+    <div id="pwBox"><label class="f"><span>Passphrase</span><input type="password" id="pw"></label></div>
+    <div id="sssBox" hidden>
+      <label class="f"><span>Recovery Card A</span><input id="cA" placeholder="FFG-1-..."></label>
+      <label class="f" style="margin-top:8px"><span>Recovery Card B</span><input id="cB" placeholder="FFG-2-..."></label>
+    </div>
+    <div style="margin-top:6px"><button type="button" class="linkbtn" id="togCards">Unlock with 2 recovery cards instead</button></div>
+    ${btns("Unlock")}`);
+  $("#togCards").onclick = () => {
+    useCards = !useCards;
+    $("#pwBox").hidden = useCards;
+    $("#sssBox").hidden = !useCards;
+    $("#togCards").textContent = useCards ? "Use passphrase instead" : "Unlock with 2 recovery cards instead";
+  };
   onGo(async () => {
+    let pass = "";
+    try {
+      pass = useCards ? sssCombine2of3($("#cA").value, $("#cB").value) : $("#pw").value;
+      if (!pass) return toast("Enter your passphrase");
+    } catch (err) { return toast(err.message || "Invalid recovery cards"); }
     let incoming;
     try {
-      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(pkg.iv) }, await keyFrom($("#pw").value, unb64(pkg.salt)), unb64(pkg.data));
+      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(pkg.iv) }, await keyFrom(pass, unb64(pkg.salt)), unb64(pkg.data));
       incoming = JSON.parse(dec.decode(pt));
     } catch { return toast("Wrong passphrase"); }
 
@@ -1495,4 +1863,105 @@ $("#fileIn").onchange = async e => {
   promptUnlockPkg(pkg);
 };
 
-norm(); render();
+/* ---------- Optional In-Browser Lock + 15-min idle auto-lock ---------- */
+function engageBrowserLockScreen() {
+  browserLockPass = null;
+  clearTimeout(idleTimer);
+  $("#mainWrap").hidden = true;
+  const ls = $("#lockScreen");
+  ls.hidden = false;
+  ls.innerHTML = `<div class="lock-box">
+    <h1>Our Family <em>Field Guide</em></h1>
+    <p class="hint">This device's browser storage is locked. Enter your browser-lock passphrase to continue.</p>
+    <form id="lsForm">
+      <label class="f"><span>Passphrase</span><input type="password" id="lsPw" autofocus required></label>
+      <div style="color:var(--tomato);font-size:13px;min-height:18px;margin-top:4px" id="lsErr"></div>
+      <div class="btns"><button type="submit" class="btn primary">Unlock</button></div>
+    </form>
+  </div>`;
+  $("#lsForm").onsubmit = async ev => {
+    ev.preventDefault();
+    const err = $("#lsErr"); err.textContent = "";
+    try {
+      const pkg = JSON.parse(localStorage.getItem(LOCK_KEY) || "null");
+      const pass = $("#lsPw").value;
+      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(pkg.iv) }, await keyFrom(pass, unb64(pkg.salt)), unb64(pkg.data));
+      S = JSON.parse(dec.decode(pt));
+      browserLockPass = pass;
+      ls.hidden = true;
+      $("#mainWrap").hidden = false;
+      norm(); render(); startIdleLockTimer();
+    } catch { err.textContent = "Wrong passphrase"; }
+  };
+}
+function resetIdleLockTimer() {
+  clearTimeout(idleTimer);
+  if (browserLockPass) idleTimer = setTimeout(engageBrowserLockScreen, 15 * 60 * 1000);
+}
+function startIdleLockTimer() {
+  ["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, resetIdleLockTimer, { passive: true }));
+  resetIdleLockTimer();
+}
+function lockBrowserDialog() {
+  if (!hasCrypto()) return toast("Browser lock requires HTTPS, localhost, or Web Crypto support");
+  if (browserLockPass) {
+    openDlg(`<h3>Browser lock is active</h3>
+      <p class="hint">Your data is encrypted in this browser and auto-locks after 15 minutes idle.</p>
+      <div class="btns">
+        <button type="button" class="btn" id="cancelDlg">Cancel</button>
+        <button type="button" class="btn" id="unlockForever">Turn off lock</button>
+        <button type="submit" class="btn primary" id="go">Lock now</button>
+      </div>`);
+    $("#cancelDlg").onclick = () => $("#dlg").close();
+    $("#unlockForever").onclick = () => {
+      browserLockPass = null;
+      clearTimeout(idleTimer);
+      localStorage.removeItem(LOCK_KEY);
+      localStorage.setItem(KEY, JSON.stringify(S));
+      $("#dlg").close(); render(); toast("Browser lock turned off");
+    };
+    $("#dlgForm").onsubmit = async ev => {
+      ev.preventDefault();
+      await lockQueue;
+      $("#dlg").close();
+      engageBrowserLockScreen();
+    };
+    return;
+  }
+  openDlg(`<h3>Lock guide on this device</h3>
+    <p class="hint">Encrypts what's stored in this browser (<code>localStorage</code>) and auto-locks after 15 minutes idle. Great for shared family laptops.</p>
+    <label class="f"><span>Passphrase (at least 8 characters)</span><input type="password" id="lpw1" required></label>
+    <div class="pass-tools"><button type="button" id="genLPw">Generate memorable passphrase</button></div>
+    <label class="f" style="margin-top:8px"><span>Type it again</span><input type="password" id="lpw2" required></label>
+    ${btns("Enable lock")}`);
+  $("#genLPw").onclick = () => {
+    const pw = generatePassphrase(5);
+    $("#lpw1").value = $("#lpw2").value = pw;
+    $("#lpw1").type = $("#lpw2").type = "text";
+  };
+  onGo(async () => {
+    const p = $("#lpw1").value;
+    if (p.length < 8) return toast("Use at least 8 characters");
+    if (p !== $("#lpw2").value) return toast("Passphrases don't match");
+    browserLockPass = p;
+    save(true, false);
+    await lockQueue;
+    $("#dlg").close();
+    startIdleLockTimer();
+    render();
+    toast("Browser lock enabled");
+  });
+}
+
+function boot() {
+  if (localStorage.getItem(LOCK_KEY) && !localStorage.getItem(KEY)) {
+    engageBrowserLockScreen();
+  } else {
+    norm(); render();
+  }
+  if (typeof navigator !== "undefined" && "serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
+}
+
+boot();

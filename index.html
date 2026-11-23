@@ -4,10 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Our Family Field Guide</title>
+<meta name="theme-color" content="#1f3a2e">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="wrap">
+<div id="lockScreen" class="lock-screen" hidden></div>
+<div class="wrap" id="mainWrap">
   <header class="mast">
     <div>
       <div class="eyebrow">Open this first · Kept for the people I love</div>
@@ -22,6 +26,7 @@
 
   <div class="privacy">🔒 <b>Your details stay on this device.</b> Nothing you type is sent anywhere; it saves in this browser automatically. Never type actual passwords or full account numbers here: write <i>where to find</i> them (your password manager, the safe) and the last 4 digits only. Use <b>Save backup</b> to make a passphrase‑locked copy your spouse can open on their own device. The code you put on GitHub never contains your family's details.</div>
 
+  <div id="demoBanner"></div>
   <nav class="tabs" id="tabs"></nav>
   <div class="searchbar" id="searchbar">
     <div class="search-row">
@@ -30,8 +35,10 @@
         <div class="search-res" id="searchRes" hidden></div>
       </div>
       <div class="comfort-btns">
+        <select id="regionSel" aria-label="Country or region"></select>
         <button type="button" class="cbtn" data-act="toggleLarge" title="Toggle larger text">A+</button>
         <button type="button" class="cbtn" data-act="toggleContrast" title="Toggle high contrast">Contrast</button>
+        <button type="button" class="cbtn" data-act="lockBrowser" title="Lock guide with a passphrase on this device">Lock</button>
       </div>
     </div>
   </div>
@@ -42,9 +49,11 @@
 <div id="printSheet" class="print-only" aria-hidden="true"></div>
 <dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
 <input type="file" id="fileIn" accept=".json,.html,application/json,text/html" hidden>
+<input type="file" id="photoIn" accept="image/*" hidden>
 <div class="toast" id="toast"></div>
 
 <script src="schema.js"></script>
+<script src="regions.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
