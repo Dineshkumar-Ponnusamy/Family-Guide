@@ -1,0 +1,16 @@
+[package]
+name = "family-field-guide"
+version = "1.0.0"
+description = "Private, 100% offline emergency, medical care, and digital legacy guide for your family."
+authors = ["Family Field Guide Contributors"]
+edition = "2021"
+
+[lib]
+name = "family_field_guide_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }

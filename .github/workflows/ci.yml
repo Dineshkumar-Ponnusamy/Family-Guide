@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate JSON configurations
+        run: |
+          python3 -m json.tool manifest.json > /dev/null
+          python3 -m json.tool desktop/package.json > /dev/null
+          python3 -m json.tool desktop/src-tauri/tauri.conf.json > /dev/null
+          python3 -m json.tool desktop/src-tauri/capabilities/default.json > /dev/null
+
+      - name: Syntax-check JavaScript files
+        run: |
+          node --check schema.js
+          node --check regions.js
+          node --check app.js
+          node --check sw.js
+          node --check desktop/sync-web.mjs
+
+      - name: Verify desktop runtime asset sync
+        run: |
+          node desktop/sync-web.mjs
+          test -f desktop/dist/index.html
+          test -f desktop/dist/app.js
+          test -f desktop/dist/icon-512.png

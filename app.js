@@ -8,7 +8,7 @@ const PROJECT_FILES = ["index.html", "styles.css", "schema.js", "regions.js", "a
 const GITIGNORE = "# Never commit your family's details\nfamily-field-guide-*.json\nfamily-field-guide-*.html\nfamily-guide-*.json\n*.backup.json\n.DS_Store\n";
 let S = load();
 let browserLockPass = null, idleTimer = null, deferredInstallPrompt = null;
-const isStandaloneApp = () => Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator?.standalone);
+const isStandaloneApp = () => Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator?.standalone || window.__TAURI_INTERNALS__ || window.__TAURI__);
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const safeJson = v => JSON.stringify(v).replace(/<\/script/gi, "<\\/script");
@@ -2481,7 +2481,7 @@ function boot() {
   } else {
     norm(); render();
   }
-  if (typeof navigator !== "undefined" && "serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) {
+  if (!window.__TAURI_INTERNALS__ && !window.__TAURI__ && typeof navigator !== "undefined" && "serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
 }

@@ -75,7 +75,7 @@ Fork this repository and turn on **Settings → Pages** (deploy from `main` bran
 Once opened over HTTPS (such as GitHub Pages), you can install **Our Family Field Guide** like a native app with zero app-store accounts or fees:
 - **Android (Chrome / Edge / Brave):** Click **Install App** in the top bar (or browser menu **⋮ → Install app**).
 - **iPhone / iPad (Safari):** Tap **Share** (`↑`) → **Add to Home Screen** → **Add**. *(Important: Safari can evict unused web storage after prolonged inactivity, so also keep a locked standalone `.html` backup saved in Apple Files / iCloud Drive.)*
-- **Windows / Mac / Linux (Desktop):** Click **Install App** (or the install icon in Chrome/Edge/Brave's address bar; on macOS Safari, use **File → Add to Dock**).
+- **Windows / Mac / Linux (Desktop PWA or Native App):** Click **Install App** (or the install icon in Chrome/Edge/Brave's address bar; on macOS Safari, use **File → Add to Dock**). Prefer standalone desktop installers (`.dmg`, `.msi`, `.AppImage`, `.deb`)? See the optional zero-touch **Tauri v2 wrapper** in [`desktop/README.md`](desktop/README.md) (automated multi-OS builds via GitHub Actions).
 
 ### 3. Share With Your Spouse
 Use **Save backup → Standalone locked HTML (.html)**, store the file in two safe places (e.g. USB drive + shared family cloud), print the **1-page Break-Glass Cover Sheet** for your fireproof box, and run the **10-Minute Family Fire Drill** once a year.
@@ -92,6 +92,7 @@ Use **Save backup → Standalone locked HTML (.html)**, store the file in two sa
 | `regions.js` | **9 country & cross-border presets**, localized directories, demo families, Diceware wordlist |
 | `app.js` | Storage, rendering, readiness audit, smart merge, Shamir split, photo compression, AES-GCM backups |
 | `manifest.json` / `sw.js` / `icon*` / `apple-touch-icon.png` | Offline PWA & iOS/Android/Desktop icons |
+| `desktop/` & `.github/workflows/` | Optional Tauri v2 desktop app wrapper (Mac/Windows/Linux) & CI/Release workflows |
 | `SECURITY.md` | Threat model, cryptographic details & safe-use rules |
 | `CONTRIBUTING.md` | How to extend sections or add your country preset |
 
