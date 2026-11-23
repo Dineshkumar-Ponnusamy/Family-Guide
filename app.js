@@ -4,10 +4,11 @@
    locked JSON + standalone HTML backups, and project export. */
 const KEY = "familyFieldGuide.v1";
 const LOCK_KEY = "familyFieldGuide.locked.v1";
-const PROJECT_FILES = ["index.html", "styles.css", "schema.js", "regions.js", "app.js", "manifest.json", "sw.js", "icon.svg", "README.md", "LICENSE"];
+const PROJECT_FILES = ["index.html", "styles.css", "schema.js", "regions.js", "app.js", "manifest.json", "sw.js", "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "README.md", "LICENSE"];
 const GITIGNORE = "# Never commit your family's details\nfamily-field-guide-*.json\nfamily-field-guide-*.html\nfamily-guide-*.json\n*.backup.json\n.DS_Store\n";
 let S = load();
-let browserLockPass = null, idleTimer = null;
+let browserLockPass = null, idleTimer = null, deferredInstallPrompt = null;
+const isStandaloneApp = () => Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator?.standalone);
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const safeJson = v => JSON.stringify(v).replace(/<\/script/gi, "<\\/script");
@@ -536,7 +537,45 @@ function render() {
     return `<section class="panel ${S.tab === t.id ? "on" : ""}" id="p-${esc(t.id)}"><h2>${esc(t.title)}</h2><p class="lede">${esc(t.lede)}</p>${body}</section>`;
   }).join("");
   document.querySelectorAll("textarea[data-f]").forEach(autoGrow);
-  meter(); trackProgress();
+  meter(); trackProgress(); syncInstallBtn();
+}
+
+function syncInstallBtn() {
+  const btn = document.querySelector('[data-act="installApp"]');
+  if (!btn) return;
+  const installed = isStandaloneApp();
+  btn.hidden = installed;
+  btn.classList.toggle("on", Boolean(deferredInstallPrompt));
+}
+
+function installAppDialog() {
+  const isFile = location.protocol === "file:";
+  const canPrompt = Boolean(deferredInstallPrompt);
+  openDlg(`<h3>Install as an offline app</h3>
+    <p class="hint">Keep <b>Our Family Field Guide</b> on your home screen or desktop for offline use—no App Store, no account, no cost.</p>
+    ${isFile ? `<p class="hint" style="color:var(--tomato)"><b>Opening from a local file:</b> browsers require HTTPS (such as your free <b>GitHub Pages</b> URL) to install as an app icon. You can still use this local file or save a standalone <code>.html</code> backup offline anytime.</p>` : ""}
+    ${canPrompt ? `<div style="margin:10px 0 12px"><button type="button" class="btn primary" id="doInstall">Install now on this device</button></div>` : ""}
+    <div class="opt-list">
+      <div class="opt-card"><div><b>iPhone / iPad (Safari)</b><small>Tap <b>Share</b> (↑) → <b>Add to Home Screen</b> → <b>Add</b>. Tip: Safari can clear browser storage if unused for long periods, so also save a locked standalone <code>.html</code> copy in Apple Files / iCloud Drive.</small></div></div>
+      <div class="opt-card"><div><b>Android (Chrome / Edge / Brave)</b><small>${canPrompt ? "Tap <b>Install now on this device</b> above, or open browser menu (⋮) → <b>Install app</b>." : "Open the browser menu (⋮) → <b>Install app</b> (or <b>Add to Home screen</b>)."}</small></div></div>
+      <div class="opt-card"><div><b>Windows / Mac / Linux (Desktop)</b><small>${canPrompt ? "Click <b>Install now on this device</b> above, or click the install icon in your browser address bar." : "In Chrome, Edge, or Brave click the install icon in the address bar. In macOS Safari choose <b>File → Add to Dock</b>."}</small></div></div>
+    </div>
+    <div class="btns"><button type="button" class="btn primary" id="cancelDlg">Close</button></div>`, true);
+  $("#cancelDlg").onclick = () => $("#dlg").close();
+  const di = $("#doInstall");
+  if (di) {
+    di.onclick = async () => {
+      if (!deferredInstallPrompt) return;
+      try {
+        await deferredInstallPrompt.prompt();
+        const ch = await deferredInstallPrompt.userChoice;
+        if (ch?.outcome === "accepted") toast("Installing app…");
+      } catch {}
+      deferredInstallPrompt = null;
+      syncInstallBtn();
+      $("#dlg").close();
+    };
+  }
 }
 
 function computeAudit() {
@@ -981,6 +1020,7 @@ document.addEventListener("click", e => {
   if (d.act === "toggleLarge") { S.largeText = !S.largeText; save(true, false); render(); }
   if (d.act === "toggleContrast") { S.highContrast = !S.highContrast; save(true, false); render(); }
   if (d.act === "lockBrowser") lockBrowserDialog();
+  if (d.act === "installApp") installAppDialog();
   if (d.act === "loadDemo") loadDemo();
   if (d.act === "clearDemo") clearDemo();
   if (d.act === "dismissDemo") { S.dismissDemo = true; save(true, false); render(); }
@@ -1154,9 +1194,10 @@ function newListDialog(tab) {
 function structureOnly() {
   return JSON.stringify({ customTabs: S.customTabs, extra: S.extra }, null, 2);
 }
-function download(name, text, type = "text/plain") {
+function download(name, data, type = "text/plain") {
+  const blob = data instanceof Blob ? data : new Blob([data], { type });
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click();
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 function projectDialog() {
@@ -1175,7 +1216,14 @@ function projectDialog() {
     let ok = 0;
     if (!isFile) {
       for (const f of PROJECT_FILES) {
-        try { const r = await fetch(f); if (!r.ok) throw 0; download(f, await r.text()); ok++; await new Promise(z => setTimeout(z, 250)); } catch {}
+        try {
+          const r = await fetch(f);
+          if (!r.ok) throw 0;
+          if (/\.png$/i.test(f)) download(f, await r.blob());
+          else download(f, await r.text());
+          ok++;
+          await new Promise(z => setTimeout(z, 250));
+        } catch {}
       }
     }
     download("gitignore.txt", GITIGNORE);
@@ -2426,6 +2474,8 @@ function lockBrowserDialog() {
 }
 
 function boot() {
+  window.addEventListener?.("beforeinstallprompt", e => { e.preventDefault(); deferredInstallPrompt = e; syncInstallBtn(); });
+  window.addEventListener?.("appinstalled", () => { deferredInstallPrompt = null; syncInstallBtn(); toast("Installed as an app"); });
   if (localStorage.getItem(LOCK_KEY) && !localStorage.getItem(KEY)) {
     engageBrowserLockScreen();
   } else {

@@ -35,18 +35,24 @@ Use a **private** repository anyway. Your section names alone can reveal things 
 
 Open `index.html` in a browser. That's all.
 
-To use it from any device (or install on your phone as an offline PWA), turn on **Settings → Pages** (deploy from the `main` branch) in your GitHub repo. Each device keeps its own answers, so use **Open backup** on a new device to load or merge the same details.
+To use it from any device (or install on your phone or computer as an offline app), turn on **Settings → Pages** (deploy from the `main` branch) in your GitHub repo. Each device keeps its own answers, so use **Open backup** on a new device to load or merge the same details.
+
+### Install as an App (Android, iOS, Windows, Mac & Linux)
+Once opened over HTTPS (such as your GitHub Pages link), you can install **Our Family Field Guide** like a native app with zero app-store fees:
+- **Android (Chrome / Edge / Brave):** Click **Install App** in the top bar (or browser menu **⋮ → Install app**).
+- **iPhone / iPad (Safari):** Tap **Share** (`↑`) → **Add to Home Screen** → **Add**. *(Tip: Safari can clear unused browser data after prolonged inactivity, so also keep a locked standalone `.html` backup saved in Apple Files / iCloud Drive.)*
+- **Windows / Mac / Linux (Desktop):** Click **Install App** (or the install icon in Chrome/Edge/Brave's address bar; on macOS Safari, use **File → Add to Dock**).
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `index.html` | Page shell & PWA manifest link |
+| `index.html` | Page shell, iOS/PWA meta tags & manifest link |
 | `styles.css` | Look, accessibility modes & print layout |
-| `schema.js` | **Core content**: checklists, scripts, sections, fields, fire drill |
+| `schema.js` | **Core content**: checklists, scripts, sections, guides, fire drill |
 | `regions.js` | **Country & cross-border presets**, sample demo families, Diceware wordlist |
 | `app.js` | Saving, rendering, readiness audit, smart merge, Shamir split, photo compression, backups |
-| `manifest.json` / `sw.js` / `icon.svg` | Offline PWA support |
+| `manifest.json` / `sw.js` / `icon.svg` / `icon-*.png` / `apple-touch-icon.png` | Offline PWA & iOS/Android/Desktop app icons |
 
 ### Add your country
 To contribute a new country preset, add an entry to `REGIONS` in `regions.js` with your local `emergency` number, `fieldOverrides`, `listOverrides`, and `stepOverrides`.
