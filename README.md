@@ -1,99 +1,107 @@
-# Family Guide
+# Our Family Field Guide
 
-A private, offline emergency guide for your family. If something happens and you can't be there, your spouse opens one page and finds what to do first, who to call, where the money and papers are, and a page written for the kids.
+**A private, 100% offline emergency, medical care & digital legacy guide for the people you love.**
 
-It's plain HTML, CSS and JavaScript: no build step, no server, no accounts, no tracking.
+If something happens and you can't be there—an accident, a sudden 2 AM ER visit, chronic/critical illness treatment, job loss, or passing away—your spouse or caregiver opens **one page** and finds what to do first, who to call, where the money, IDs, insurance, and papers are, how to handle a large payout safely, and a page written for the kids.
 
-## Your data never goes in this repo
+> **100% Offline** · **Zero Dependencies / Zero Build** · **Zero Tracking** · **AES-256-GCM Locked Exports** · **9 Country & Cross-Border Presets** · **MIT Licensed**
 
-- Answers save only in the browser you type them in (`localStorage`).
-- **Save backup** creates either a **standalone locked HTML file** (`.html`, opens offline in any browser with just your passphrase) or an **encrypted JSON file** (`.json`), locked with AES‑256‑GCM (PBKDF2, 250,000 rounds). Share the file and passphrase with your spouse separately.
-- `.gitignore` blocks backup files (`family-field-guide-*.json`, `family-field-guide-*.html`, `family-guide-*.json`) so they can't be committed by accident.
-- Never type passwords or full account numbers. Write where to find them, plus the last 4 digits.
+---
 
-Use a **private** repository anyway. Your section names alone can reveal things about your family.
+## Try It Live (Zero Data Leaves Your Browser)
 
-## Features
+- **Live Preview (GitHub Pages):** https://dineshkumar-ponnusamy.github.io/Family-Guide/ *(Click **"Load sample family"** in the banner to explore realistic US + India H-1B and standard examples instantly.)*
+- **Run Completely Offline:** Download this repository and double-click `index.html` in any browser—no server, npm install, or internet connection needed.
 
-- **Country & Cross-Border Presets:** Switch between **United States**, **India**, **US + India (H-1B / Visa / NRI)**, **Cross-Border / Work Visa**, **United Kingdom**, **Canada**, **Australia**, **European Union**, and **Generic** to adapt emergency numbers, retirement/tax terminology, and visa/consulate steps without losing your answers.
-- **Edit & Read modes:** Switch to **Read mode** so a stressed reader can tap phone numbers/links, check off playbook steps, and log calls without accidentally editing or seeing empty boxes. Includes **A+** large text, **Contrast**, and optional **In-Browser Lock** with 15-minute idle auto-lock.
-- **Standalone Offline Copy & Smart Merge:** Export a self-contained `.html` locked copy that includes search, clickable playbook links, editable Call & claim log, Caregiver sheet printing, photo snippets, and **Save updated copy (.html)**. **Open backup** supports **Smart Merge** to combine edits from both spouses without overwriting.
-- **Memorable Passphrases & 2-of-3 Split Recovery Cards:** Generate typo-proof 5-word Diceware passphrases and optional 2-of-3 Shamir Split Recovery Cards (Spouse · Safe · Trusted Person) where any 2 cards unlock your backup.
-- **Encrypted Photo Snippets:** Attach compressed offline photos (~80–120 KB) of shut-off valves, breaker panels, or insurance cards directly inside your encrypted guide.
-- **Playbooks & Call Log:** Step-by-step action plans for hospital/incapacitation, **chronic or critical illness treatment**, **handling a large insurance payout**, death, money emergencies, unreachable parents (caregiver), and **work-visa/cross-border emergencies**, with clickable cross-links and a built-in **Call & claim log**.
-- **How to Find Vetted & Low-Cost Help:** Built-in, country-localized guide under **Contacts → Professionals** showing families starting from scratch how to find Bar-referred lawyers, AILA/accredited immigration counsel, hourly/flat-fee fiduciary advisors, free tax clinics (VITA/CVITP/TaxAid), Employer EAP perks, and hospital charity-care advocates.
-- **Chronic & Critical Illness Care + 1-Page ER Grab Sheet:** Dedicated fields for active diagnosis/protocol, 24/7 specialist triage line, red-flag fever/symptom rules, implants/ports/arm warnings, rescue meds, and patient portal proxy—printing onto a crisp 1-page ER & Medical Grab Sheet, plus an opt-in **Chronic & Critical Illness Care Plan** section template.
-- **Beginner's Guide to Big Money & Payouts:** Plain-English 6-part guide (6–12 month decision freeze, deposit-insurance caps, 4-bucket allocation with a 3.5%–4% rule example for $1M / regional equivalents, fee-only fiduciary hiring, bereavement scam defense, and a 15-minute monthly routine) localized per country/region.
-- **Crypto & Key Government IDs (Privacy-Safe Mapping):** Dedicated tables for **Crypto & digital assets** (map only, never raw seed words) and **Key IDs (SSN / PAN / Aadhaar / Passport)** (last 4 digits + physical location only)—with automatic Readiness Audit warnings if a seed phrase or full SSN/Aadhaar appears.
-- **15-Minute Essentials, Demo Mode & Search:** Preview everything with 1-click **Load sample family**, jump to the 10 essentials, or press `/` (with `↑`/`↓`/`Enter` navigation) to search across every field, table, money-guide rule, and playbook step.
-- **Readiness Audit & 10-Minute Fire Drill:** Spots real-world gaps (solo-only bank accounts, missing retirement/life-insurance beneficiaries, missing phone/2FA unlock info, exposed seeds or full IDs, missing payout guidance, cross-border visa gaps, stale backups) and tracks a 5-step spouse dry-run.
-- **Modular Section Templates:** One-click templates under **+ Section** for Chronic & Critical Illness Care Plan, Visa/Immigration/Cross-Border, Smart Home & Wi‑Fi, Crypto/Domains/Homelab, Small Business, Traveling/Caregiver, International/Expat Assets, and Aging Parents.
-- **Flexible Printing & PWA:** Print the full guide (with or without empty blanks), a **1-page Family Executive Summary**, a **1-page ER & Medical Grab Sheet**, the **Survivor's Money Guide**, a **1-page Caregiver / Fridge Sheet**, a **1-page Break-Glass Cover Sheet**, or install as an offline PWA (`manifest.json` + `sw.js`).
-- **Check-Up Reminders:** Export a recurring 6-month `.ics` calendar reminder next to **Mark reviewed**.
+---
 
-## Run it
+## 30-Second Privacy & Security Audit
 
-Open `index.html` in a browser. That's all.
+Families put sensitive maps in here (where papers live, last 4 digits of accounts, life insurance, kids' pickup lists), so trust matters:
 
-To use it from any device (or install on your phone or computer as an offline app), turn on **Settings → Pages** (deploy from the `main` branch) in your GitHub repo. Each device keeps its own answers, so use **Open backup** on a new device to load or merge the same details.
+1. **Zero network traffic & zero external scripts:** Plain HTML, CSS, and vanilla JavaScript (`index.html`, `styles.css`, `schema.js`, `regions.js`, `app.js`). Open DevTools → Network tab and see zero outbound requests, zero analytics, and zero CDNs.
+2. **Stays strictly in your browser (`localStorage`):** Nothing you type is ever uploaded anywhere. Optional **In-Browser Lock** encrypts local browser storage too and auto-locks after 15 minutes idle.
+3. **Client-side AES-256-GCM backups:** **Save backup** encrypts your data locally using the Web Crypto API (`PBKDF2-SHA-256`, 250,000 iterations, random 16-byte salt & 12-byte IV) into either a `.json` file or a **standalone self-contained `.html` file** that will still open offline in any browser 15 years from now.
+4. **Never store raw secrets:** Built-in Readiness Audits actively warn you if a 12+ word crypto seed phrase or a full SSN / 12-digit Aadhaar appears anywhere in your tables. See [SECURITY.md](SECURITY.md) for the full cryptographic & threat model.
+5. **Repo stays empty of personal data:** [`.gitignore`](.gitignore) blocks backup files, exported sections, and `.ics` reminders by default. *(Tip: use a **private** fork/repo anyway if your custom section titles could reveal personal details.)*
 
-### Install as an App (Android, iOS, Windows, Mac & Linux)
-Once opened over HTTPS (such as your GitHub Pages link), you can install **Our Family Field Guide** like a native app with zero app-store fees:
+---
+
+## What's Included
+
+### 1. Emergency Playbooks, Calm Read Mode & 1-Page Executive Summary
+- **7 Actionable Playbooks** with clickable deep-links (`↳ Money → Insurance`) and an interactive **Call & claim log**:
+  1. Hospital / incapacitation
+  2. Chronic or critical illness treatment
+  3. Passing away
+  4. Handling big money (e.g. $1M life insurance payout)
+  5. Money emergency (job loss / big bill)
+  6. Both parents unreachable (Caregiver guide)
+  7. Work-visa & cross-border emergency (H-1B / NRI / Expat)
+- **Read mode vs. Edit mode:** Switch to **Read mode** so a stressed spouse sees only filled answers with tappable `tel:` / `mailto:` / `https:` links and can't overwrite details by accident. Includes **A+** large text, **Contrast** mode, collapsible cards, Quick-Add chips, and `/` instant search (`↑` / `↓` / `Enter`).
+- **1-Page Family Executive Summary:** One-screen (or 1-page printed) overview of contacts, accounts, payout instructions, crypto map, all insurance policies (with Beneficiaries), key IDs, titles, kids, pets, shut-offs, and active ER alerts.
+
+### 2. Chronic & Critical Illness Care + 1-Page ER Grab Sheet
+- Dedicated **Health → Chronic / critical illness & ER care** fields for active diagnosis/protocol, 24/7 specialist triage line & preferred ER, red-flag fever/symptom rules (*"call oncology before taking fever-reducers"*), implants/ports/lines & arm restrictions, rescue *"just-in-case"* meds, portal proxy/HIPAA access, and food/visitor boundaries.
+- Prints as a wallet/fridge-ready **1-Page ER & Medical Grab Sheet** (available in `Print` and standalone `.html` backups), plus a 1-click **Chronic & Critical Illness Care Plan** section template under **+ Section** (Go-Bag, Communication Captain, Kids' Teachers, Social Worker/Copay Aid, Care Squad, Symptom/Question Log, EOB vs. Bill tracker) and *"Open When"* keepsakes + caregiver respite permission.
+
+### 3. Beginner's Guide to Big Money & Insurance Payouts
+- Designed for a surviving spouse who has never managed large savings or household finances before:
+  - **My instructions for big money / insurance payouts** card under **Money**.
+  - **6-Part Plain-English Guide** (readable on screen, searchable, and printable): (1) the 6–12 month decision freeze, (2) day-1 safe cash parking under deposit-insurance caps + automatic *"Monthly Paycheck"* transfers, (3) a concrete **4-Bucket Plan & 3.5%–4% Rule** localized for `$1,000,000` / `₹2 Crore` / `£500,000` / `€500,000`, (4) how to hire a **Fee-Only Fiduciary** and spot annuity/whole-life/ULIP sales traps, (5) bereavement scam & loan-request defense scripts, and (6) a 15-minute monthly money routine.
+
+### 4. Global, India & Cross-Border (H-1B / NRI / Expat) Support
+- Switch instantly between **United States**, **US + India (H-1B / Visa / NRI)**, **India**, **Cross-Border / Work Visa (Any 2 Countries)**, **United Kingdom**, **Canada**, **Australia**, **European Union**, and **International / Generic**.
+- Adapts emergency numbers (`911`, `112`, `999`, `000`), retirement/tax terms (`401k`/`IRA`, `EPF`/`PPF`/`NPS`, `ISA`/`SIPP`, `RRSP`/`TFSA`, `Super`), nominee vs. legal heir warnings, non-citizen estate tax thresholds, grace periods, and a 1-click **Visa, Immigration & Cross-Border** section template.
+
+### 5. Crypto, Key IDs & How to Find Vetted / Free Help
+- **Crypto & digital assets** table (map hardware wallets/exchanges, physical seed locations, and a trusted tech helper—never raw seeds) + **Key IDs (SSN / PAN / Aadhaar / Passport)** table (last 4 digits + storage location only).
+- **Finding Vetted & Free Help** guide directly under **Contacts → Professionals**: how families starting from scratch can find Bar-referred lawyers, independent immigration attorneys (AILA / IAA / CICC / OMARA), hourly/flat-fee fiduciaries, free tax clinics (IRS VITA / CVITP / ATO / TaxAid), Employer **EAP** perks, **Hospital Social Workers**, and **Dollar For** hospital charity-care advocates.
+
+### 6. Resilient Backups, Two-Spouse Smart Merge & Family Fire Drill
+- **Two-Spouse Smart Merge:** Opening a backup lets you merge answers from both spouses with conflict detection rather than blindly overwriting.
+- **2-of-3 Shamir Split Recovery Cards + Diceware:** Generate typo-proof 5-word passphrases and printable 2-of-3 recovery cards (Spouse · Safe · Trusted Person) where any 2 cards unlock your backup.
+- **Encrypted Photo Snippets:** Attach up to 10 compressed offline photos (~80–120 KB) of shut-off valves, breaker panels, or insurance cards inside your encrypted backup.
+- **Readiness Audit, 10-Minute Fire Drill & 6-Month `.ics` Reminders:** Flags real-world gaps (missing joint bank account, missing beneficiaries, missing phone/2FA unlock, exposed seeds/IDs, stale backups) and exports recurring `.ics` calendar reminders.
+
+---
+
+## Quick Start & Install as an App
+
+### 1. Run Online or via GitHub Pages (Recommended)
+Fork this repository and turn on **Settings → Pages** (deploy from `main` branch, root `/`) to get your own HTTPS URL accessible from any phone or laptop.
+
+### 2. Install as an Offline App (Android, iOS, Windows, Mac & Linux)
+Once opened over HTTPS (such as GitHub Pages), you can install **Our Family Field Guide** like a native app with zero app-store accounts or fees:
 - **Android (Chrome / Edge / Brave):** Click **Install App** in the top bar (or browser menu **⋮ → Install app**).
-- **iPhone / iPad (Safari):** Tap **Share** (`↑`) → **Add to Home Screen** → **Add**. *(Tip: Safari can clear unused browser data after prolonged inactivity, so also keep a locked standalone `.html` backup saved in Apple Files / iCloud Drive.)*
+- **iPhone / iPad (Safari):** Tap **Share** (`↑`) → **Add to Home Screen** → **Add**. *(Important: Safari can evict unused web storage after prolonged inactivity, so also keep a locked standalone `.html` backup saved in Apple Files / iCloud Drive.)*
 - **Windows / Mac / Linux (Desktop):** Click **Install App** (or the install icon in Chrome/Edge/Brave's address bar; on macOS Safari, use **File → Add to Dock**).
+
+### 3. Share With Your Spouse
+Use **Save backup → Standalone locked HTML (.html)**, store the file in two safe places (e.g. USB drive + shared family cloud), print the **1-page Break-Glass Cover Sheet** for your fireproof box, and run the **10-Minute Family Fire Drill** once a year.
+
+---
 
 ## Files
 
-| File | What it is |
+| File | What it does |
 |---|---|
 | `index.html` | Page shell, iOS/PWA meta tags & manifest link |
-| `styles.css` | Look, accessibility modes & print layout |
-| `schema.js` | **Core content**: checklists, scripts, sections, guides, fire drill |
-| `regions.js` | **Country & cross-border presets**, sample demo families, Diceware wordlist |
-| `app.js` | Saving, rendering, readiness audit, smart merge, Shamir split, photo compression, backups |
-| `manifest.json` / `sw.js` / `icon.svg` / `icon-*.png` / `apple-touch-icon.png` | Offline PWA & iOS/Android/Desktop app icons |
-
-### Add your country
-To contribute a new country preset, add an entry to `REGIONS` in `regions.js` with your local `emergency` number, `fieldOverrides`, `listOverrides`, and `stepOverrides`.
-
-## Extending the guide
-
-### Without code
-In the app, use **+ Section** to add a whole new tab, or **+ Add a field** / **+ Add a table** at the bottom of any section. These save with your answers and travel inside your backups.
-
-### In code (shared by everyone who uses your copy)
-Edit `schema.js`.
-
-**Add a section:** add an object to `TABS`:
-
-```js
-{ id: "business", label: "Our business", title: "The business",
-  lede: "What happens to the business if I can't run it.",
-  blocks: [
-    { type: "fields", title: "Basics", fields: [
-      ["b_partner", "Business partner & phone"],
-      ["b_bank", "Business bank (last 4)"],
-      ["b_plan", "Succession plan", "", true]   // true = wide text box
-    ]},
-    { type: "list", id: "b_clients", title: "Key clients",
-      cols: [["name","Client"],["contact","Contact"],["note","Notes"]],
-      seed: [{}] }
-  ]}
-```
-
-**Add a checklist path:** add a key to `PLAYBOOK` with a `label` and `phases`, each with `steps` of `{ id, t, d, ref }`.
-
-**Add a "what to say" script:** add `["Title", "Words to say"]` to `SCRIPTS`.
-
-**Rules**
-- Every `id` must be unique across the whole file.
-- Don't rename an `id` after you've filled it in. Answers are stored by `id`, so a renamed field shows up empty (the old answer is still in your backup).
-- Sections you added in the app can be copied into code: **GitHub → Download project files** also saves `my-sections.json` with labels only.
-
-## Keep it current
-
-Press **Mark reviewed** after each check‑up. The guide reminds you after 6 months. Good times to review: new job, new house, a new baby, renewing insurance, tax season.
+| `styles.css` | Editorial paper UI, `A+`, high-contrast & print sheets |
+| `schema.js` | **Core content**: playbooks, scripts, money guide, pro finder, sections, fire drill |
+| `regions.js` | **9 country & cross-border presets**, localized directories, demo families, Diceware wordlist |
+| `app.js` | Storage, rendering, readiness audit, smart merge, Shamir split, photo compression, AES-GCM backups |
+| `manifest.json` / `sw.js` / `icon*` / `apple-touch-icon.png` | Offline PWA & iOS/Android/Desktop icons |
+| `SECURITY.md` | Threat model, cryptographic details & safe-use rules |
+| `CONTRIBUTING.md` | How to extend sections or add your country preset |
 
 ---
-General guidance only, not legal, tax or financial advice. Ask an estate attorney what applies where you live.
+
+## Extending & Contributing
+
+- **No code needed:** Click **+ Section** (choose from 8 templates including Illness Care, Visa/Cross-Border, Smart Home, Crypto/Homelab, Small Business, Aging Parents) or add fields/tables at the bottom of any section.
+- **Contribute your country or improvements:** See [CONTRIBUTING.md](CONTRIBUTING.md) for the `regions.js` country template and schema rules (never rename existing IDs so older `familyFieldGuide.v1` backups stay 100% compatible).
+
+## License & Disclaimer
+
+Released under the [MIT License](LICENSE). General educational organization guidance only—not legal, tax, medical, or financial advice. Consult licensed local professionals for what applies where you live.

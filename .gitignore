@@ -1,6 +1,10 @@
 # Never commit your family's details
 family-field-guide-*.json
 family-field-guide-*.html
+family-field-guide-backup.json
 family-guide-*.json
+family-guide-checkup.ics
+my-sections.json
+gitignore.txt
 *.backup.json
 .DS_Store
