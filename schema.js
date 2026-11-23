@@ -149,8 +149,8 @@ const TABS = [
       ]},
       { type: "list", id: "accounts", title: "Bank accounts", hint: "Note Joint vs. Solo: solo accounts often freeze upon death; keep joint checking open for incoming paychecks.",
         cols: [["inst","Bank"],["type","Type"],["own","Owner / joint"],["last4","Last 4"],["access","How to access"]], seed: [{type:"Checking"},{type:"Savings"}] },
-      { type: "list", id: "invest", title: "Retirement & investments", cols: [["inst","Company"],["type","Type (401k, IRA…)"],["benef","Beneficiary"],["last4","Last 4"]], seed: [{}] },
-      { type: "list", id: "insurance", title: "Insurance", hint: "Life, disability, health, home, auto, umbrella.", cols: [["type","Type"],["co","Company"],["amt","Coverage"],["pol","Policy (last 4)"],["phone","Claims phone"],["renew","Renews"]], seed: [{type:"Life (work)"},{type:"Life (personal)"},{type:"Disability"},{type:"Health"},{type:"Home / renters"},{type:"Auto"}] },
+      { type: "list", id: "invest", title: "Retirement & investments", hint: "Named beneficiaries on retirement accounts override your will—verify them annually.", cols: [["inst","Company"],["type","Type (401k, IRA…)"],["benef","Beneficiary"],["last4","Last 4"]], seed: [{}] },
+      { type: "list", id: "insurance", title: "Insurance", hint: "Life, disability, health, home, auto, umbrella. Named beneficiaries override your will—check them annually.", cols: [["type","Type"],["co","Company"],["amt","Coverage"],["benef","Beneficiary"],["pol","Policy (last 4)"],["phone","Claims phone"],["renew","Renews"]], seed: [{type:"Life (work)"},{type:"Life (personal)"},{type:"Disability"},{type:"Health"},{type:"Home / renters"},{type:"Auto"}] },
       { type: "list", id: "bills", title: "Bills & autopay", cols: [["name","Bill"],["amt","Amount"],["due","Due"],["how","Paid from / autopay?"]], seed: [{name:"Mortgage / rent"},{name:"Electric"},{name:"Water"},{name:"Phone"},{name:"Internet"}] },
       { type: "list", id: "cards", title: "Credit cards", hint: "Authorized users lose access upon death. Solo unsecured card balances belong to the estate—ask the attorney before paying.",
         cols: [["issuer","Issuer"],["last4","Last 4"],["own","Whose name / joint"],["autopay","Autopay?"]], seed: [{}] },
@@ -324,4 +324,12 @@ const SECTION_TEMPLATES = [
       { title: "Parents' medications & doctors", cols: ["Parent", "Medication / doctor", "Notes"] }
     ]
   }
+];
+
+const FIRE_DRILL = [
+  { id: "fd_unlock", t: "Spouse unlocked the standalone .html copy on their own device", d: "Hand them the locked .html file and passphrase to verify they can open it without your help." },
+  { id: "fd_papers", t: "Spouse found the original will, passports & safe key in under 2 minutes", d: "Walk physically to the exact safe, drawer, or filing box together." },
+  { id: "fd_phone", t: "Spouse unlocked your phone right now", d: "Confirm the passcode works and they know where authenticator / 2FA codes live." },
+  { id: "fd_legacy", t: "Password manager emergency access & Apple/Google Legacy Contacts are active", d: "Verify invitations are accepted and not stuck in pending." },
+  { id: "fd_pickup", t: "School/daycare authorized pickup & emergency contacts are current", d: "Confirm listed names and numbers match who you would call today." }
 ];

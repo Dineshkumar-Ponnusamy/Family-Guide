@@ -24,8 +24,16 @@
 
   <nav class="tabs" id="tabs"></nav>
   <div class="searchbar" id="searchbar">
-    <input type="search" id="searchIn" placeholder="Search guide… (press /)" aria-label="Search guide" autocomplete="off">
-    <div class="search-res" id="searchRes" hidden></div>
+    <div class="search-row">
+      <div class="search-box">
+        <input type="search" id="searchIn" placeholder="Search guide… (press /)" aria-label="Search guide" autocomplete="off">
+        <div class="search-res" id="searchRes" hidden></div>
+      </div>
+      <div class="comfort-btns">
+        <button type="button" class="cbtn" data-act="toggleLarge" title="Toggle larger text">A+</button>
+        <button type="button" class="cbtn" data-act="toggleContrast" title="Toggle high contrast">Contrast</button>
+      </div>
+    </div>
   </div>
   <div id="modeBanner"></div>
   <main id="panels"></main>

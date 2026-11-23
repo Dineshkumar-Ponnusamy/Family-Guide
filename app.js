@@ -18,8 +18,11 @@ function load() {
 function norm() {
   S.f ??= {}; S.lists ??= {}; S.checks ??= {}; S.track ??= "hurt"; S.tab ??= "start";
   S.extra ??= {}; S.customTabs ??= [];
+  S.fireDrill ??= {}; S.lastDryRun ??= null;
   S.readMode = Boolean(S.readMode);
   S.hideEssentials = Boolean(S.hideEssentials);
+  S.largeText = Boolean(S.largeText);
+  S.highContrast = Boolean(S.highContrast);
   S.lastBackup ??= null;
   if (S.track && !PLAYBOOK[S.track]) S.track = "hurt";
   TABS.forEach(t => t.blocks.forEach(b => {
@@ -27,6 +30,12 @@ function norm() {
   }));
   Object.values(S.extra).flat().forEach(x => { if (x.type === "list") S.lists[x.id] ??= [{}]; });
   if (!allTabs().some(t => t.id === S.tab)) S.tab = "start";
+}
+function autoGrow(ta) {
+  if (!ta || !ta.style) return;
+  ta.style.height = "auto";
+  const h = ta.scrollHeight || 0;
+  if (h > 0) ta.style.height = Math.max(h + 4, 68) + "px";
 }
 const allTabs = () => [...TABS, ...S.customTabs.map(c => ({ ...c, custom: true, blocks: [], lede: "Your own section. Add fields or tables below." }))];
 
@@ -152,6 +161,7 @@ function essentialsHtml() {
       <h3>15-minute essentials</h3>
       <div class="ess-actions">
         <span>${doneCount} of ${ESSENTIALS.length} filled</span>
+        <button type="button" data-act="readiness">Readiness &amp; Fire Drill</button>
         <button type="button" data-act="hideEss">Hide</button>
       </div>
     </div>
@@ -255,6 +265,13 @@ function extras(tab) {
 
 function render() {
   document.body.classList.toggle("read-mode", !!S.readMode);
+  document.body.classList.toggle("large-text", !!S.largeText);
+  document.body.classList.toggle("high-contrast", !!S.highContrast);
+  const largeBtn = document.querySelector('[data-act="toggleLarge"]');
+  if (largeBtn) largeBtn.classList.toggle("on", !!S.largeText);
+  const hcBtn = document.querySelector('[data-act="toggleContrast"]');
+  if (hcBtn) hcBtn.classList.toggle("on", !!S.highContrast);
+
   const tabs = allTabs();
   $("#tabs").innerHTML = tabs.map(t => `<button type="button" data-tab="${esc(t.id)}" class="${S.tab === t.id ? "on" : ""} ${t.custom ? "custom" : ""}">${esc(t.label)}</button>`).join("")
     + `<button type="button" class="newtab" data-act="newtab">+ Section</button><span class="spacer"></span>`
@@ -275,7 +292,80 @@ function render() {
       : inner;
     return `<section class="panel ${S.tab === t.id ? "on" : ""}" id="p-${esc(t.id)}"><h2>${esc(t.title)}</h2><p class="lede">${esc(t.lede)}</p>${body}</section>`;
   }).join("");
+  document.querySelectorAll("textarea[data-f]").forEach(autoGrow);
   meter(); trackProgress();
+}
+
+function computeAudit() {
+  const f = id => String(S.f[id] || "").trim();
+  const rowsOf = id => (S.lists[id] || []).filter(r => rowHasFilledValue(id, r));
+  const items = [];
+
+  const missCore = [!f("q_first") && "First person to call", !f("q_binder") && "Where papers live"].filter(Boolean);
+  items.push(missCore.length
+    ? { id: "start_core", sev: "high", title: "Start-here essentials incomplete", detail: `Missing: ${missCore.join(", ")}.`, tab: "start", block: "If you read nothing else", field: !f("q_first") ? "q_first" : "q_binder" }
+    : { id: "start_core", sev: "ok", title: "First-call & paper locations set", detail: "Your spouse knows who to call and where originals live." });
+
+  if (!f("d_phone")) {
+    items.push({ id: "phone_2fa", sev: "high", title: "No phone unlock instructions", detail: "Banks and email send 2FA login codes to your phone—without unlock notes, your spouse can get locked out.", tab: "docs", block: "Getting into things", field: "d_phone" });
+  } else if (!f("d_2fa") && !f("d_sim")) {
+    items.push({ id: "phone_2fa", sev: "med", title: "Add 2FA recovery or carrier SIM PIN", detail: "Phone unlock is noted, but 2FA recovery codes or SIM PIN instructions will prevent lockouts.", tab: "docs", block: "Getting into things", field: "d_2fa" });
+  } else {
+    items.push({ id: "phone_2fa", sev: "ok", title: "Phone & 2FA access documented", detail: "Unlock and 2FA/SIM instructions are covered." });
+  }
+
+  const accts = rowsOf("accounts");
+  const hasJoint = accts.some(r => /joint|both|shared|&|\band\b/i.test(String(r.own || "")));
+  if (!accts.length) {
+    items.push({ id: "joint_bank", sev: "med", title: "No bank accounts listed yet", detail: "List checking/savings (last 4 digits) and mark which ones are Joint.", tab: "money", block: "accounts" });
+  } else if (!hasJoint) {
+    items.push({ id: "joint_bank", sev: "high", title: "No bank account marked Joint", detail: "Solo accounts often freeze upon death, stranding household bills until probate.", tab: "money", block: "accounts" });
+  } else {
+    items.push({ id: "joint_bank", sev: "ok", title: "Joint bank access listed", detail: "At least one account is marked joint/shared." });
+  }
+
+  const invRows = rowsOf("invest");
+  const lifeRows = rowsOf("insurance").filter(r => /life/i.test(String(r.type || "")));
+  const invMiss = invRows.filter(r => !String(r.benef || "").trim()).length;
+  const lifeMiss = lifeRows.filter(r => !String(r.benef || "").trim()).length;
+  const totalBenefMiss = invMiss + lifeMiss;
+  if (totalBenefMiss > 0) {
+    items.push({ id: "beneficiaries", sev: "high", title: `${totalBenefMiss} retirement/life-insurance entry missing a Beneficiary`, detail: "Named beneficiaries override your will—record who is named on each.", tab: "money", block: invMiss > 0 ? "invest" : "insurance" });
+  } else if (!invRows.length && !lifeRows.length) {
+    items.push({ id: "beneficiaries", sev: "med", title: "No life insurance or retirement accounts listed", detail: "Record policies and retirement accounts along with named beneficiaries.", tab: "money", block: "insurance" });
+  } else {
+    items.push({ id: "beneficiaries", sev: "ok", title: "Beneficiaries recorded", detail: "Listed life insurance & retirement entries name a beneficiary." });
+  }
+
+  const missLegal = [!f("d_will") && "Will / trust", !f("d_hcd") && "Healthcare directive", !f("d_fpoa") && "Financial POA"].filter(Boolean);
+  if (missLegal.length) {
+    const onlyMed = missLegal.length === 1 && !f("d_hcd");
+    items.push({ id: "legal_med", sev: "high", title: `Missing legal/medical papers (${missLegal.length})`, detail: `Not recorded: ${missLegal.join(", ")}.`, tab: onlyMed ? "health" : "docs", block: onlyMed ? "My medical info" : "Legal papers", field: !f("d_will") ? "d_will" : (!f("d_fpoa") ? "d_fpoa" : "d_hcd") });
+  } else {
+    items.push({ id: "legal_med", sev: "ok", title: "Core legal & medical directives mapped", detail: "Will/trust, healthcare directive, and financial POA locations are recorded." });
+  }
+
+  items.push((!f("d_pm") && !f("d_legacy"))
+    ? { id: "digital_legacy", sev: "med", title: "No password manager or legacy contact noted", detail: "Set up Password Manager emergency access or Apple/Google Legacy Contacts.", tab: "docs", block: "Getting into things", field: "d_pm" }
+    : { id: "digital_legacy", sev: "ok", title: "Digital legacy / password access set", detail: "Password manager or platform legacy contacts are documented." });
+
+  const backupAgeDays = S.lastBackup ? (Date.now() - new Date(S.lastBackup)) / 864e5 : Infinity;
+  if (hasAnyContent() && !S.lastBackup) {
+    items.push({ id: "backup_fresh", sev: "high", title: "No locked backup saved yet", detail: "Browser storage can be evicted—save a standalone locked .html copy now.", act: "backup" });
+  } else if (hasAnyContent() && S.updated && S.updated > S.lastBackup) {
+    items.push({ id: "backup_fresh", sev: "med", title: "Recent changes aren't in your latest backup", detail: "Save a fresh locked backup so your spouse's copy matches.", act: "backup" });
+  } else if (S.lastBackup && backupAgeDays > 180) {
+    items.push({ id: "backup_fresh", sev: "med", title: "Last locked backup is over 6 months old", detail: "Export a fresh copy after checking your details.", act: "backup" });
+  } else {
+    items.push({ id: "backup_fresh", sev: "ok", title: "Locked backup is current", detail: S.lastBackup ? `Saved ${new Date(S.lastBackup).toLocaleDateString()}.` : "No entries to back up yet." });
+  }
+
+  const drillAgeDays = S.lastDryRun ? (Date.now() - new Date(S.lastDryRun)) / 864e5 : Infinity;
+  items.push((!S.lastDryRun || drillAgeDays > 365)
+    ? { id: "fire_drill", sev: "med", title: "Run a 10-minute Family Fire Drill", detail: "Verify your spouse can unlock the guide and physically locate papers and phone access." }
+    : { id: "fire_drill", sev: "ok", title: "Family Fire Drill completed", detail: `Last dry-run: ${new Date(S.lastDryRun).toLocaleDateString()}.` });
+
+  return items;
 }
 
 function meter() {
@@ -296,8 +386,14 @@ function meter() {
   const r = S.reviewed ? new Date(S.reviewed) : null, days = r ? (Date.now() - r) / 864e5 : Infinity;
   $("#rev").className = "rev" + (days > 180 ? " stale" : "");
   const unsaved = hasAnyContent() && (!S.lastBackup || (S.updated && S.updated > S.lastBackup));
+  const audit = computeAudit();
+  const okCount = audit.filter(x => x.sev === "ok").length;
+  const highCount = audit.filter(x => x.sev === "high").length;
+  const gapCount = audit.length - okCount;
+  const pillCls = highCount ? " warn" : (gapCount === 0 ? " ok" : "");
   $("#rev").innerHTML = (r ? `Last reviewed ${r.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}${days > 180 ? " · time for a check‑up" : ""}` : "Not reviewed yet")
     + `<button type="button" data-act="reviewed">Mark reviewed</button><button type="button" data-act="ics" title="Add 6-month reminder to calendar">Remind me</button>`
+    + `<div><button type="button" class="audit-pill${pillCls}" data-act="readiness">Readiness: ${okCount}/${audit.length}${gapCount ? ` · ${gapCount} gap${gapCount === 1 ? "" : "s"}` : " · ready"}</button></div>`
     + (unsaved ? `<div class="backup-warn">Unsaved changes · <button type="button" data-act="backup">Save backup</button></div>` : "");
 }
 
@@ -411,13 +507,25 @@ function runSearch(q) {
     ? hits.map((h, i) => `<button type="button" class="sr-item" data-sr="${i}"><span class="sr-tab">${esc(h.tabLabel)}</span><span class="sr-txt"><b>${esc(h.title)}</b>${h.sub ? ` — ${esc(h.sub)}` : ""}</span></button>`).join("")
     : `<div class="sr-empty">No matches for "${esc(q.trim())}"</div>`;
   res._hits = hits;
+  res._idx = -1;
   res.hidden = false;
+}
+
+function setSearchActive(idx) {
+  const res = $("#searchRes");
+  const items = Array.from(res.querySelectorAll(".sr-item"));
+  if (!items.length) return;
+  const next = ((idx % items.length) + items.length) % items.length;
+  res._idx = next;
+  items.forEach((el, i) => el.classList.toggle("active", i === next));
+  items[next].scrollIntoView({ block: "nearest" });
 }
 
 /* ---------- events ---------- */
 document.addEventListener("input", e => {
   const el = e.target;
   if (el.id === "searchIn") { runSearch(el.value); return; }
+  if (el.tagName === "TEXTAREA" && el.dataset.f) autoGrow(el);
   if (el.dataset.f) {
     const id = el.dataset.f;
     S.f[id] = el.value;
@@ -449,17 +557,28 @@ document.addEventListener("change", e => {
 });
 
 document.addEventListener("keydown", e => {
+  const res = $("#searchRes"), sin = $("#searchIn");
+  if (document.activeElement === sin && !res.hidden && res._hits?.length) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setSearchActive((res._idx ?? -1) + 1); return; }
+    if (e.key === "ArrowUp") { e.preventDefault(); setSearchActive((res._idx ?? 0) - 1); return; }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const pick = res._hits[res._idx >= 0 ? res._idx : 0];
+      res.hidden = true; sin.value = "";
+      if (pick) jumpTo(pick.tabId, pick.blockKey, pick.fieldId, pick.trackKey);
+      return;
+    }
+  }
   if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
     const tag = (document.activeElement?.tagName || "").toLowerCase();
     if (!["input", "textarea", "select"].includes(tag) && !$("#dlg").open) {
       e.preventDefault();
-      $("#searchIn").focus();
+      sin.focus();
     }
   } else if (e.key === "Escape") {
-    const res = $("#searchRes");
     if (!res.hidden) {
       res.hidden = true;
-      $("#searchIn").blur();
+      sin.blur();
     }
   }
 });
@@ -504,9 +623,12 @@ document.addEventListener("click", e => {
   if (d.deltab) confirmDlg("Delete this whole section and everything in it?", () => { (S.extra[d.deltab] || []).forEach(x => { delete S.f[x.id]; delete S.lists[x.id]; }); delete S.extra[d.deltab]; S.customTabs = S.customTabs.filter(t => t.id !== d.deltab); S.tab = "start"; save(true); render(); });
   if (d.act === "newtab") newTabDialog();
   if (d.act === "toggleRead") { S.readMode = !S.readMode; save(true, false); render(); }
+  if (d.act === "toggleLarge") { S.largeText = !S.largeText; save(true, false); render(); }
+  if (d.act === "toggleContrast") { S.highContrast = !S.highContrast; save(true, false); render(); }
   if (d.act === "hideEss") { S.hideEssentials = true; save(true, false); render(); }
   if (d.act === "showEss") { S.hideEssentials = false; save(true, false); render(); }
   if (d.act === "reviewed") { S.reviewed = new Date().toISOString(); save(true); toast("Marked as reviewed"); }
+  if (d.act === "readiness") readinessDialog();
   if (d.act === "ics") downloadIcs();
   if (d.act === "print") printDialog();
   if (d.act === "backup") backupDialog();
@@ -523,7 +645,62 @@ function relist(id) {
 }
 
 /* ---------- dialogs ---------- */
-function openDlg(html) { $("#dlgForm").innerHTML = html; $("#dlg").showModal(); }
+function openDlg(html, wide = false) {
+  $("#dlg").classList.toggle("wide", !!wide);
+  $("#dlgForm").innerHTML = html;
+  $("#dlg").showModal();
+}
+function readinessDialog() {
+  const rank = { high: 0, med: 1, ok: 2 };
+  const audit = computeAudit().sort((a, b) => rank[a.sev] - rank[b.sev]);
+  const okCount = audit.filter(x => x.sev === "ok").length;
+  const drillDone = FIRE_DRILL.filter(x => S.fireDrill[x.id]).length;
+  const dryTxt = S.lastDryRun ? `Last completed ${new Date(S.lastDryRun).toLocaleDateString()}` : "Not completed yet";
+
+  openDlg(`<h3>Readiness &amp; Family Fire Drill</h3>
+    <p class="hint"><b>${okCount} of ${audit.length}</b> readiness checks passed. Fix the top gaps first so your spouse never hits a locked phone, frozen solo account, or missing beneficiary.</p>
+    <div class="audit-list">${audit.map((a, idx) => `<div class="audit-item">
+      <div class="audit-left"><span class="adot ${a.sev}"></span><div><b>${esc(a.title)}</b><small>${esc(a.detail)}</small></div></div>
+      ${(a.sev !== "ok" && (a.tab || a.act)) ? `<button type="button" class="audit-fix" data-afix="${idx}">Fix →</button>` : ""}
+    </div>`).join("")}</div>
+    <h3 style="margin-top:14px">10-Minute Family Fire Drill</h3>
+    <p class="hint">Sit down together once a year and test these 5 real-world checks.</p>
+    <div class="drill-list">${FIRE_DRILL.map(f => `<label class="drill-item${S.fireDrill[f.id] ? " done" : ""}">
+      <input type="checkbox" data-fd="${esc(f.id)}" ${S.fireDrill[f.id] ? "checked" : ""}>
+      <div><b>${esc(f.t)}</b><small>${esc(f.d)}</small></div>
+    </label>`).join("")}</div>
+    <div class="drill-foot">
+      <span>${drillDone} of ${FIRE_DRILL.length} checked · ${esc(dryTxt)}</span>
+      <button type="button" class="btn" id="markDrill">Mark fire drill done</button>
+    </div>
+    <div class="btns"><button type="button" class="btn primary" id="closeReady">Done</button></div>`, true);
+
+  $("#closeReady").onclick = () => $("#dlg").close();
+  $("#dlgForm").querySelectorAll("[data-afix]").forEach(btn => {
+    btn.onclick = () => {
+      const a = audit[+btn.dataset.afix];
+      $("#dlg").close();
+      if (a.act === "backup") backupDialog();
+      else if (a.tab) jumpTo(a.tab, a.block || "", a.field || "");
+    };
+  });
+  $("#dlgForm").querySelectorAll("[data-fd]").forEach(cb => {
+    cb.onchange = () => {
+      S.fireDrill[cb.dataset.fd] = cb.checked;
+      cb.closest(".drill-item").classList.toggle("done", cb.checked);
+      save(true);
+      const count = FIRE_DRILL.filter(x => S.fireDrill[x.id]).length;
+      const footSpan = $("#dlgForm").querySelector(".drill-foot span");
+      if (footSpan) footSpan.textContent = `${count} of ${FIRE_DRILL.length} checked · ${S.lastDryRun ? `Last completed ${new Date(S.lastDryRun).toLocaleDateString()}` : "Not completed yet"}`;
+    };
+  });
+  $("#markDrill").onclick = () => {
+    S.lastDryRun = new Date().toISOString();
+    save(true);
+    toast("Family fire drill recorded");
+    readinessDialog();
+  };
+}
 const btns = (go = "Save") => `<div class="btns"><button type="button" class="btn" id="cancelDlg">Cancel</button><button type="submit" class="btn primary" id="go">${go}</button></div>`;
 function onGo(fn) {
   $("#cancelDlg").onclick = () => $("#dlg").close();
@@ -799,23 +976,41 @@ function buildStandaloneHtml(pkg) {
 <style>
 :root{--paper:#f6f1e6;--paper2:#efe7d6;--card:#fffdf8;--ink:#1f3a2e;--ink2:#4b5f55;--mute:#8a8f84;--rule:#d9cfb9;--tomato:#d2512f;--sun:#e9b44c;--sky:#4f7c8a;--serif:Georgia,Palatino,serif;--sans:system-ui,-apple-system,sans-serif;--mono:ui-monospace,Menlo,monospace}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--sans);padding:24px 16px 64px}
+body.large-text{font-size:18px;line-height:1.55}body.large-text .val,body.large-text input{font-size:17px}
+body.high-contrast{--paper:#ffffff;--paper2:#f0f0f0;--card:#ffffff;--ink:#0b1410;--ink2:#1c2822;--mute:#3a4440;--rule:#333333;--tomato:#b32d0f;--sun:#c97b00;--sky:#0b4f6c}
+body.high-contrast .card{border-width:2px;box-shadow:none}
 .wrap{max-width:980px;margin:0 auto}.lock{max-width:460px;margin:8vh auto;background:var(--card);border:2px solid var(--ink);border-radius:8px;padding:24px;box-shadow:6px 6px 0 var(--ink)}
 h1,h2,h3{font-family:var(--serif);margin-top:0}h1 em{color:var(--tomato)}
 input[type=password]{width:100%;font:16px var(--sans);padding:9px 10px;border:1.5px solid var(--ink);border-radius:4px;margin:6px 0 12px}
-.btn{font:600 13px var(--sans);padding:8px 15px;border-radius:999px;border:1.5px solid var(--ink);background:var(--card);color:var(--ink);cursor:pointer}
-.btn.primary{background:var(--ink);color:var(--paper)}.err{color:var(--tomato);font-size:13px;min-height:18px;margin:4px 0}
-.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:18px}
+.btn{font:600 12.5px var(--sans);padding:7px 13px;border-radius:999px;border:1.5px solid var(--ink);background:var(--card);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--ink);color:var(--paper)}.btn.on{background:var(--sky);border-color:var(--sky);color:#fff}
+.err{color:var(--tomato);font-size:13px;min-height:18px;margin:4px 0}.status{font-size:12.5px;color:var(--sky);font-weight:600}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:14px}
+.sbox{position:relative;margin-bottom:14px}.sbox input{width:100%;background:var(--card);border:1.5px solid var(--rule);border-radius:999px;padding:8px 15px;font:14px var(--sans);color:var(--ink)}
+.sres{position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--card);border:1.5px solid var(--ink);border-radius:6px;box-shadow:5px 5px 0 var(--paper2);z-index:15;max-height:280px;overflow-y:auto}
+.sri{display:flex;gap:10px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--rule);padding:8px 12px;cursor:pointer;font:13.5px var(--sans);color:var(--ink)}
+.sri:hover,.sri.active{background:var(--paper2)}.sri.active{box-shadow:inset 3px 0 0 var(--tomato)}
+.srt{font-family:var(--mono);font-size:11px;text-transform:uppercase;color:var(--sky);min-width:90px;flex-shrink:0}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}.tabs button{font:600 13px var(--sans);border:1.5px solid var(--ink);background:transparent;color:var(--ink);padding:6px 13px;border-radius:999px;cursor:pointer}
 .tabs button.on{background:var(--ink);color:var(--paper)}.panel{display:none}.panel.on{display:block}
 .card{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:16px 18px;margin-bottom:14px;box-shadow:3px 3px 0 var(--paper2)}
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px 18px}.lbl{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;color:var(--ink2);display:block}
+@keyframes flash{0%{box-shadow:0 0 0 3px var(--tomato)}100%{box-shadow:3px 3px 0 var(--paper2)}}.flash{animation:flash 1.6s ease}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 18px}.lbl{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;color:var(--ink2);display:block}
 .val{padding:4px 0;border-bottom:1px dashed var(--rule);white-space:pre-wrap;word-break:break-word}.val a{color:var(--sky);font-weight:600}
 .glance{background:var(--ink);color:var(--paper);border-radius:6px;padding:16px 18px;margin-bottom:16px;box-shadow:5px 5px 0 var(--tomato)}.glance .lbl{color:#c9d3cc}.glance .val{border-color:#4a6458}.glance .val a{color:var(--sun)}
-.row{border:1px dashed var(--rule);border-radius:4px;padding:10px;margin-bottom:8px;background:#fffef9}.track{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.row{border:1px dashed var(--rule);border-radius:4px;padding:10px 12px;margin-bottom:8px;background:#fffef9;position:relative}
+.row input{width:100%;font:14px var(--sans);color:var(--ink);background:transparent;border:none;border-bottom:1.5px solid var(--rule);padding:4px 2px;outline:none}
+.row input:focus{border-color:var(--tomato)}.rx{position:absolute;top:5px;right:7px;border:none;background:none;color:var(--mute);cursor:pointer;font-size:15px}
+.track{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .track button{font:600 13px var(--sans);padding:8px 12px;border:2px solid var(--ink);background:var(--card);border-radius:4px;cursor:pointer}.track button.on{background:var(--tomato);border-color:var(--tomato);color:#fff}
 .step{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule)}.step.done .st{text-decoration:line-through;color:var(--mute)}
+.rlink{font-family:var(--mono);font-size:12px;color:var(--sky);background:none;border:none;padding:3px 0 0;cursor:pointer;text-align:left;display:block}
+.rlink:hover{text-decoration:underline}
 .script{border-left:3px solid var(--sun);padding:6px 12px;background:#fffaf0;margin-bottom:8px}
-@media print{.tabs,.bar .acts,.track{display:none!important}.panel{display:block!important;break-before:page}.panel:first-of-type{break-before:auto}}
+#sheetOnly{display:none;max-width:780px;margin:0 auto}.sgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.sboxc{border:1px solid #bbb;border-radius:4px;padding:10px 12px}.sboxc.full{grid-column:1/-1}.sboxc h3{margin:0 0 6px;font-size:16px;border-bottom:1px solid #ddd;padding-bottom:3px}
+@media print{.tabs,.bar .acts,.track,.sbox,.rx,.addbtn{display:none!important}.panel{display:block!important;break-before:page}.panel:first-of-type{break-before:auto}
+body.sheet-mode #app{display:none!important}body.sheet-mode #sheetOnly{display:block!important}}
 </style>
 </head>
 <body>
@@ -830,28 +1025,54 @@ input[type=password]{width:100%;font:16px var(--sans);padding:9px 10px;border:1.
   </form>
 </div>
 <div id="app" class="wrap" hidden></div>
+<div id="sheetOnly"></div>
 <script id="ffg-pkg" type="application/json">${safeJson(pkg)}<\/script>
 <script id="ffg-schema" type="application/json">${safeJson(schemaData)}<\/script>
 <script>
-const pkg = JSON.parse(document.getElementById("ffg-pkg").textContent);
+const TEMPLATE_HTML = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
+let pkg = JSON.parse(document.getElementById("ffg-pkg").textContent);
 const SC = JSON.parse(document.getElementById("ffg-schema").textContent);
 const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const safeJson = v => JSON.stringify(v).replace(/<\\/script/gi, "<\\\\/script");
 const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+function b64(buf) {
+  const bytes = new Uint8Array(buf); let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
 const linkify = v => esc(v).replace(/(https?:\\/\\/[^\\s<>"]+)|([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})|(\\+?\\d[\\d\\s().-]{6,}\\d)/g, (m,u,e,p) => {
-  if (u) return '<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>';
+  if (u) { let c = u, tr = ""; const tm = c.match(/[.,;:!?)]+$/); if (tm) { c = c.slice(0,-tm[0].length); tr = tm[0]; } return '<a href="'+c+'" target="_blank" rel="noopener noreferrer">'+c+'</a>'+tr; }
   if (e) return '<a href="mailto:'+e+'">'+e+'</a>';
   if (p) { const d = p.replace(/[^\\d+]/g,""); return d.replace(/\\D/g,"").length >= 7 ? '<a href="tel:'+d+'">'+p+'</a>' : m; }
   return m;
 });
+function isRowFilled(id, r) {
+  if (!r) return false;
+  const ne = Object.entries(r).filter(([,v]) => String(v ?? "").trim() !== "");
+  if (!ne.length) return false;
+  const blk = SC.TABS.flatMap(t => t.blocks).find(b => b.id === id);
+  if (blk && blk.seed && blk.seed.length) {
+    const isSeed = blk.seed.some(sr => {
+      const se = Object.entries(sr).filter(([,v]) => String(v ?? "").trim() !== "");
+      return se.length === ne.length && se.every(([k,v]) => String(r[k]??"").trim() === String(v??"").trim());
+    });
+    if (isSeed) return false;
+  }
+  return true;
+}
+let unlockedPass = "";
 document.getElementById("uform").onsubmit = async ev => {
   ev.preventDefault();
   const err = document.getElementById("uerr"); err.textContent = "";
+  const pass = document.getElementById("upw").value;
   try {
     const enc = new TextEncoder(), dec = new TextDecoder();
-    const base = await crypto.subtle.importKey("raw", enc.encode(document.getElementById("upw").value), "PBKDF2", false, ["deriveKey"]);
+    const base = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
     const key = await crypto.subtle.deriveKey({ name:"PBKDF2", salt:unb64(pkg.salt), iterations:250000, hash:"SHA-256" }, base, { name:"AES-GCM", length:256 }, false, ["decrypt"]);
     const pt = await crypto.subtle.decrypt({ name:"AES-GCM", iv:unb64(pkg.iv) }, key, unb64(pkg.data));
     const S = JSON.parse(dec.decode(pt));
+    unlockedPass = pass;
+    document.getElementById("upw").value = "";
     document.getElementById("gate").hidden = true;
     const app = document.getElementById("app"); app.hidden = false;
     renderAll(app, S);
@@ -859,45 +1080,155 @@ document.getElementById("uform").onsubmit = async ev => {
 };
 function renderAll(root, S) {
   S.f = S.f || {}; S.lists = S.lists || {}; S.checks = S.checks || {}; S.extra = S.extra || {}; S.customTabs = S.customTabs || [];
-  let activeTab = "start", activeTrack = S.track && SC.PLAYBOOK[S.track] ? S.track : "hurt";
+  if (!S.lists.call_log) S.lists.call_log = [{}];
+  let activeTab = "start", activeTrack = S.track && SC.PLAYBOOK[S.track] ? S.track : "hurt", dirty = false, statusMsg = "";
   const tabs = [...SC.TABS, ...S.customTabs.map(c => ({ ...c, blocks: [] }))];
   const fv = (label, id) => String(S.f[id] || "").trim() ? '<div><span class="lbl">'+esc(label)+'</span><div class="val">'+linkify(S.f[id])+'</div></div>' : "";
   const listHtml = (title, id, cols) => {
-    const rows = (S.lists[id] || []).filter(r => Object.values(r).some(v => String(v||"").trim()));
+    const rows = (S.lists[id] || []).filter(r => isRowFilled(id, r));
     if (!rows.length) return "";
-    return '<div class="card"><h3>'+esc(title)+'</h3>'+rows.map(r => '<div class="row"><div class="grid2">'+cols.map(([k,l]) => String(r[k]||"").trim() ? '<div><span class="lbl">'+esc(l)+'</span><div class="val">'+linkify(r[k])+'</div></div>' : "").join("")+'</div></div>').join("")+'</div>';
+    return '<div class="card" data-bid="'+esc(id)+'" data-btitle="'+esc(title)+'"><h3>'+esc(title)+'</h3>'+rows.map(r => '<div class="row"><div class="grid2">'+cols.map(([k,l]) => String(r[k]||"").trim() ? '<div><span class="lbl">'+esc(l)+'</span><div class="val">'+linkify(r[k])+'</div></div>' : "").join("")+'</div></div>').join("")+'</div>';
   };
+  const callLogHtml = () => {
+    const b = SC.TABS[0].blocks.find(x => x.id === "call_log");
+    const rows = S.lists.call_log || [{}];
+    return '<div class="card" data-bid="call_log" data-btitle="Call & claim log"><h3>Call &amp; claim log</h3><p style="font-size:13px;color:var(--ink2);margin:0 0 10px">Log calls &amp; reference numbers here, then click <b>Save updated copy</b>.</p>'
+      + rows.map((r,i) => '<div class="row"><button type="button" class="rx" data-cdel="'+i+'">✕</button><div class="grid2">'
+        + b.cols.map(([k,l]) => '<div><span class="lbl">'+esc(l)+'</span><input data-cl="'+i+':'+esc(k)+'" value="'+esc(r[k]||"")+'"></div>').join("")
+        + '</div></div>').join("")
+      + '<button type="button" class="btn addbtn" id="addCall">+ Add a row</button></div>';
+  };
+  function jump(tabId, bkey, sid, tk) {
+    if (tabs.some(t => t.id === tabId)) activeTab = tabId;
+    if (tk && SC.PLAYBOOK[tk]) activeTrack = tk;
+    draw();
+    const p = root.querySelector('[data-panel="'+CSS.escape(activeTab)+'"]');
+    if (!p) return;
+    let el = bkey ? (p.querySelector('[data-bid="'+CSS.escape(bkey)+'"]') || p.querySelector('[data-btitle="'+CSS.escape(bkey)+'"]') || p.querySelector('[data-sid="'+CSS.escape(bkey)+'"]')) : null;
+    if (el) {
+      const card = el.closest(".card,.glance,.step") || el;
+      card.scrollIntoView({ behavior:"smooth", block:"center" });
+      card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+    } else window.scrollTo({ top:0, behavior:"smooth" });
+  }
+  function searchHits(q) {
+    const term = q.trim().toLowerCase(), out = [];
+    if (!term) return out;
+    const add = (tabId, tabLbl, title, sub, bk="", tk="") => { if (out.length < 12) out.push({ tabId, tabLbl, title, sub, bk, tk }); };
+    SC.GLANCE.forEach(([id,l]) => { const v = String(S.f[id]||""); if (l.toLowerCase().includes(term)||v.toLowerCase().includes(term)) add("start","Start here",l,v,"glance"); });
+    tabs.forEach(t => {
+      (t.blocks||[]).forEach(b => {
+        if (b.type === "fields") b.fields.forEach(([id,l]) => { const v = String(S.f[id]||""); if (l.toLowerCase().includes(term)||v.toLowerCase().includes(term)||b.title.toLowerCase().includes(term)) add(t.id,t.label,l,v||b.title,b.title); });
+        if (b.type === "list") {
+          const mr = (S.lists[b.id]||[]).find(r => isRowFilled(b.id,r) && Object.values(r).some(v => String(v||"").toLowerCase().includes(term)));
+          if (b.title.toLowerCase().includes(term)||mr) add(t.id,t.label,b.title,mr?Object.values(mr).filter(Boolean).join(" · "):"Table",b.id);
+        }
+      });
+      (S.extra[t.id]||[]).forEach(x => {
+        if (x.type==="field") { const v = String(S.f[x.id]||""); if (x.label.toLowerCase().includes(term)||v.toLowerCase().includes(term)) add(t.id,t.label,x.label,v,"More details"); }
+        else { const mr = (S.lists[x.id]||[]).find(r => Object.values(r).some(v => String(v||"").toLowerCase().includes(term))); if (x.title.toLowerCase().includes(term)||mr) add(t.id,t.label,x.title,mr?Object.values(mr).filter(Boolean).join(" · "):"Table",x.id); }
+      });
+    });
+    SC.KIDS.forEach(([id,,l]) => { const v = String(S.f[id]||""); if (l.toLowerCase().includes(term)||v.toLowerCase().includes(term)) add("kids","For the kids",l,v,"kids_card"); });
+    Object.entries(SC.PLAYBOOK).forEach(([tk,p]) => p.phases.forEach(ph => ph.steps.forEach(s => { if (s.t.toLowerCase().includes(term)||s.d.toLowerCase().includes(term)) add("start","Playbook",s.t,s.d,s.id,tk); })));
+    return out;
+  }
   function draw() {
-    root.innerHTML = '<div class="bar"><div style="flex:1"><h1>Our Family <em>Field Guide</em></h1><small style="color:var(--ink2)">Unlocked offline copy · Updated '+esc((S.updated||"").slice(0,10))+'</small></div><div class="acts" style="display:flex;gap:8px"><button class="btn" id="dlJson">Download .json</button><button class="btn primary" onclick="window.print()">Print</button></div></div>'
-      + '<div class="tabs">'+tabs.map(t => '<button data-t="'+esc(t.id)+'" class="'+(activeTab===t.id?"on":"")+'">'+esc(t.label)+'</button>').join("")+'</div>'
+    document.body.classList.toggle("large-text", !!S.largeText);
+    document.body.classList.toggle("high-contrast", !!S.highContrast);
+    root.innerHTML = '<div class="bar"><div style="flex:1"><h1>Our Family <em>Field Guide</em></h1><small style="color:var(--ink2)">Unlocked offline copy · Updated '+esc((S.updated||"").slice(0,10))+(dirty?' · <span style="color:var(--tomato)">Unsaved changes</span>':"")+'</small>'+(statusMsg?'<div class="status">'+esc(statusMsg)+'</div>':"")+'</div>'
+      + '<div class="acts" style="display:flex;gap:6px;flex-wrap:wrap">'
+      + '<button type="button" class="btn'+(S.largeText?" on":"")+'" id="saLg">A+</button>'
+      + '<button type="button" class="btn'+(S.highContrast?" on":"")+'" id="saHc">Contrast</button>'
+      + '<button type="button" class="btn" id="saCare">Caregiver sheet</button>'
+      + '<button type="button" class="btn" id="dlJson">Download .json</button>'
+      + '<button type="button" class="btn primary" id="saveHtml">Save updated copy (.html)</button>'
+      + '<button type="button" class="btn" onclick="window.print()">Print</button></div></div>'
+      + '<div class="sbox"><input type="search" id="saSearch" placeholder="Search guide… (press /)" autocomplete="off"><div class="sres" id="saRes" hidden></div></div>'
+      + '<div class="tabs">'+tabs.map(t => '<button type="button" data-t="'+esc(t.id)+'" class="'+(activeTab===t.id?"on":"")+'">'+esc(t.label)+'</button>').join("")+'</div>'
       + tabs.map(t => {
         let html = "";
         if (t.id === "start") {
           const g = SC.GLANCE.map(([id,l]) => fv(l, id)).join("");
-          if (g) html += '<div class="glance"><h3>If you read nothing else</h3><div class="grid2">'+g+'</div></div>';
+          if (g) html += '<div class="glance" data-bid="glance"><h3>If you read nothing else</h3><div class="grid2">'+g+'</div></div>';
           const p = SC.PLAYBOOK[activeTrack];
-          html += '<div class="card"><h3>What\\'s happening?</h3><div class="track">'+Object.entries(SC.PLAYBOOK).map(([k,v]) => '<button data-tr="'+esc(k)+'" class="'+(activeTrack===k?"on":"")+'">'+esc(v.label)+'</button>').join("")+'</div>'
-            + p.phases.map(ph => '<h4>'+esc(ph.when)+'</h4>'+ph.steps.map(s => '<label class="step '+(S.checks[s.id]?"done":"")+'"><input type="checkbox" data-ck="'+esc(s.id)+'" '+(S.checks[s.id]?"checked":"")+'><div><div class="st"><b>'+esc(s.t)+'</b></div><div style="font-size:13.5px;color:var(--ink2)">'+esc(s.d)+'</div></div></label>').join("")).join("")+'</div>';
+          html += '<div class="card"><h3>What\\'s happening?</h3><div class="track">'+Object.entries(SC.PLAYBOOK).map(([k,v]) => '<button type="button" data-tr="'+esc(k)+'" class="'+(activeTrack===k?"on":"")+'">'+esc(v.label)+'</button>').join("")+'</div>'
+            + p.phases.map(ph => '<h4>'+esc(ph.when)+'</h4>'+ph.steps.map(s => '<div class="step '+(S.checks[s.id]?"done":"")+'" data-sid="'+esc(s.id)+'"><input type="checkbox" data-ck="'+esc(s.id)+'" '+(S.checks[s.id]?"checked":"")+'><div><div class="st"><b>'+esc(s.t)+'</b></div><div style="font-size:13.5px;color:var(--ink2)">'+esc(s.d)+'</div>'+(s.refTab?'<button type="button" class="rlink" data-jt="'+esc(s.refTab)+'" data-jb="'+esc(s.refBlock||"")+'">↳ '+esc(s.ref)+'</button>':"")+'</div></div>').join("")).join("")+'</div>';
+          html += callLogHtml();
         }
         (t.blocks || []).forEach(b => {
-          if (b.type === "fields") { const fs = b.fields.map(([id,l]) => fv(l, id)).join(""); if (fs) html += '<div class="card"><h3>'+esc(b.title)+'</h3><div class="grid2">'+fs+'</div></div>'; }
-          if (b.type === "list") html += listHtml(b.title, b.id, b.cols);
-          if (b.type === "scripts") html += '<div class="card"><h3>What to say</h3>'+SC.SCRIPTS.map(([st,sb]) => '<div class="script"><b>'+esc(st)+'</b><div><i>'+esc(sb)+'</i></div></div>').join("")+'</div>';
-          if (b.type === "letter" && String(S.f.letter||"").trim()) html += '<div class="card"><h3>A note to you</h3><div class="val" style="font-family:var(--serif);font-size:17px">'+linkify(S.f.letter)+'</div></div>';
-          if (b.type === "kids") { const ks = SC.KIDS.map(([id,em,l]) => fv(em+" "+l, id)).join(""); if (ks) html += '<div class="card"><div class="grid2">'+ks+'</div></div>'; }
+          if (b.type === "fields") { const fs = b.fields.map(([id,l]) => fv(l, id)).join(""); if (fs) html += '<div class="card" data-btitle="'+esc(b.title)+'"><h3>'+esc(b.title)+'</h3><div class="grid2">'+fs+'</div></div>'; }
+          if (b.type === "list" && b.id !== "call_log") html += listHtml(b.title, b.id, b.cols);
+          if (b.type === "scripts") html += '<div class="card" data-btitle="What to say"><h3>What to say</h3>'+SC.SCRIPTS.map(([st,sb]) => '<div class="script"><b>'+esc(st)+'</b><div><i>'+esc(sb)+'</i></div></div>').join("")+'</div>';
+          if (b.type === "letter" && String(S.f.letter||"").trim()) html += '<div class="card" data-btitle="A note to you"><h3>A note to you</h3><div class="val" style="font-family:var(--serif);font-size:17px">'+linkify(S.f.letter)+'</div></div>';
+          if (b.type === "kids") { const ks = SC.KIDS.map(([id,em,l]) => fv(em+" "+l, id)).join(""); if (ks) html += '<div class="card" data-bid="kids_card"><div class="grid2">'+ks+'</div></div>'; }
         });
         const ex = S.extra[t.id] || [];
         const exf = ex.filter(x => x.type === "field").map(x => fv(x.label, x.id)).join("");
-        if (exf) html += '<div class="card"><h3>More details</h3><div class="grid2">'+exf+'</div></div>';
+        if (exf) html += '<div class="card" data-btitle="More details"><h3>More details</h3><div class="grid2">'+exf+'</div></div>';
         ex.filter(x => x.type === "list").forEach(x => { html += listHtml(x.title, x.id, x.cols); });
-        return '<section class="panel '+(activeTab===t.id?"on":"")+'"><h2>'+esc(t.title)+'</h2>'+(html || '<p style="color:var(--mute)">No filled entries in this section.</p>')+'</section>';
+        return '<section class="panel '+(activeTab===t.id?"on":"")+'" data-panel="'+esc(t.id)+'"><h2>'+esc(t.title)+'</h2>'+(html || '<p style="color:var(--mute)">No filled entries in this section.</p>')+'</section>';
       }).join("");
     root.querySelectorAll("[data-t]").forEach(b => b.onclick = () => { activeTab = b.dataset.t; draw(); });
     root.querySelectorAll("[data-tr]").forEach(b => b.onclick = () => { activeTrack = b.dataset.tr; draw(); });
-    root.querySelectorAll("[data-ck]").forEach(c => c.onchange = () => { S.checks[c.dataset.ck] = c.checked; c.closest(".step").classList.toggle("done", c.checked); });
+    root.querySelectorAll("[data-jt]").forEach(b => b.onclick = () => jump(b.dataset.jt, b.dataset.jb));
+    root.querySelectorAll("[data-ck]").forEach(c => c.onchange = () => { S.checks[c.dataset.ck] = c.checked; dirty = true; c.closest(".step").classList.toggle("done", c.checked); });
+    root.querySelectorAll("[data-cl]").forEach(inp => inp.oninput = () => { const [i,k] = inp.dataset.cl.split(":"); S.lists.call_log[+i][k] = inp.value; dirty = true; });
+    root.querySelectorAll("[data-cdel]").forEach(btn => btn.onclick = () => { S.lists.call_log.splice(+btn.dataset.cdel, 1); if (!S.lists.call_log.length) S.lists.call_log.push({}); dirty = true; draw(); });
+    const addCall = root.querySelector("#addCall");
+    if (addCall) addCall.onclick = () => { S.lists.call_log.push({}); dirty = true; draw(); };
+    root.querySelector("#saLg").onclick = () => { S.largeText = !S.largeText; draw(); };
+    root.querySelector("#saHc").onclick = () => { S.highContrast = !S.highContrast; draw(); };
+    root.querySelector("#saCare").onclick = () => {
+      const f = id => String(S.f[id]||"").trim();
+      const rowsOf = id => (S.lists[id]||[]).filter(r => isRowFilled(id,r));
+      document.getElementById("sheetOnly").innerHTML = '<h1>Emergency Caregiver &amp; Fridge Sheet</h1><p style="font-size:13px;color:#444">Updated '+new Date().toLocaleDateString()+'</p><div class="sgrid">'
+        + '<div class="sboxc full"><h3>Home Address (for 911)</h3><div style="font-size:18px;font-weight:700">'+esc(f("k_home")||"Not filled")+'</div>'+(f("k_safe")?'<p><b>Safe word:</b> '+esc(f("k_safe"))+'</p>':"")+'</div>'
+        + '<div class="sboxc"><h3>Who to Call First</h3><ul>'+rowsOf("first").map(r=>'<li><b>'+esc(r.name||r.rel||"Contact")+'</b>: '+esc(r.phone||"")+'</li>').join("")+'</ul>'+(f("q_first")?'<p>'+esc(f("q_first"))+'</p>':"")+'</div>'
+        + '<div class="sboxc"><h3>Kids &amp; Health</h3><ul>'+rowsOf("kids_info").map(r=>'<li><b>'+esc(r.child||"Child")+'</b> '+esc(r.pickup||"")+' '+esc(r.comfort||"")+'</li>').join("")+rowsOf("fam_health").map(r=>'<li><b>'+esc(r.name||"")+'</b> '+esc(r.allergy||"")+' '+esc(r.meds||"")+'</li>').join("")+'</ul></div>'
+        + '<div class="sboxc"><h3>House Shut-offs</h3><ul>'+[["Water",f("hk_water")],["Gas",f("hk_gas")],["Breaker",f("hk_breaker")],["Keys",f("hk_spare")]].filter(([,v])=>v).map(([k,v])=>'<li><b>'+k+':</b> '+esc(v)+'</li>').join("")+'</ul></div>'
+        + '<div class="sboxc"><h3>Pets</h3><ul>'+rowsOf("pets").map(r=>'<li><b>'+esc(r.name||"Pet")+'</b> '+esc(r.food||"")+' '+esc(r.vet||"")+'</li>').join("")+'</ul></div></div>';
+      document.body.classList.add("sheet-mode");
+      const donePrint = () => document.body.classList.remove("sheet-mode");
+      window.addEventListener("afterprint", donePrint, { once:true });
+      setTimeout(() => { window.print(); setTimeout(donePrint, 1200); }, 40);
+    };
     root.querySelector("#dlJson").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(pkg)], { type:"application/json" })); a.download = "family-field-guide-backup.json"; a.click(); };
+    root.querySelector("#saveHtml").onclick = async () => {
+      if (!unlockedPass) return;
+      const now = new Date().toISOString(); S.updated = now; S.lastBackup = now;
+      const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+      const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(unlockedPass), "PBKDF2", false, ["deriveKey"]);
+      const key = await crypto.subtle.deriveKey({ name:"PBKDF2", salt, iterations:250000, hash:"SHA-256" }, base, { name:"AES-GCM", length:256 }, false, ["encrypt"]);
+      const ct = await crypto.subtle.encrypt({ name:"AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(S)));
+      pkg = { app:"family-field-guide", v:1, salt:b64(salt), iv:b64(iv), data:b64(ct) };
+      const nextHtml = TEMPLATE_HTML.replace(/<script id="ffg-pkg" type="application\\/json">[\\s\\S]*?<\\/script>/i, () => '<script id="ffg-pkg" type="application/json">'+safeJson(pkg)+'<\\/script>');
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([nextHtml], { type:"text/html" })); a.download = "family-field-guide-"+now.slice(0,10)+".html"; a.click();
+      dirty = false; statusMsg = "Saved updated copy ("+now.slice(0,10)+")"; draw();
+    };
+    const sin = root.querySelector("#saSearch"), sres = root.querySelector("#saRes");
+    let sidx = -1, hits = [];
+    sin.oninput = () => {
+      hits = searchHits(sin.value); sidx = -1;
+      if (!sin.value.trim()) { sres.hidden = true; return; }
+      sres.innerHTML = hits.length ? hits.map((h,i) => '<button type="button" class="sri" data-si="'+i+'"><span class="srt">'+esc(h.tabLbl)+'</span><span><b>'+esc(h.title)+'</b>'+(h.sub?' — '+esc(h.sub):"")+'</span></button>').join("") : '<div style="padding:10px;color:var(--mute);font-size:13px">No matches</div>';
+      sres.hidden = false;
+      sres.querySelectorAll("[data-si]").forEach(btn => btn.onclick = () => { const h = hits[+btn.dataset.si]; sres.hidden = true; sin.value = ""; jump(h.tabId, h.bk, "", h.tk); });
+    };
+    sin.onkeydown = e => {
+      const items = Array.from(sres.querySelectorAll(".sri"));
+      if (e.key === "ArrowDown" && items.length) { e.preventDefault(); sidx = (sidx + 1) % items.length; items.forEach((el,i)=>el.classList.toggle("active",i===sidx)); }
+      else if (e.key === "ArrowUp" && items.length) { e.preventDefault(); sidx = (sidx - 1 + items.length) % items.length; items.forEach((el,i)=>el.classList.toggle("active",i===sidx)); }
+      else if (e.key === "Enter" && hits.length) { e.preventDefault(); const h = hits[sidx >= 0 ? sidx : 0]; sres.hidden = true; sin.value = ""; jump(h.tabId, h.bk, "", h.tk); }
+      else if (e.key === "Escape") { sres.hidden = true; sin.blur(); }
+    };
   }
   draw();
+  document.addEventListener("keydown", e => {
+    if (e.key === "/" && !["input","textarea"].includes((document.activeElement?.tagName||"").toLowerCase())) {
+      const si = document.getElementById("saSearch"); if (si) { e.preventDefault(); si.focus(); }
+    }
+  });
 }
 <\/script>
 </body>
@@ -956,19 +1287,187 @@ function parseBackupPayload(text) {
   return null;
 }
 
+function rowSig(row) {
+  return Object.entries(row || {})
+    .map(([k, v]) => [k, String(v ?? "").trim().toLowerCase()])
+    .filter(([, v]) => v !== "")
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join("|");
+}
+
+function fieldLabelById(id, incExtra = {}) {
+  if (id === "letter") return "A note to you";
+  const g = GLANCE.find(x => x[0] === id); if (g) return g[1];
+  const k = KIDS.find(x => x[0] === id); if (k) return k[2];
+  for (const t of TABS) {
+    for (const b of t.blocks) {
+      if (b.type === "fields") {
+        const f = b.fields.find(x => x[0] === id);
+        if (f) return f[1];
+      }
+    }
+  }
+  const ex = [...Object.values(S.extra).flat(), ...Object.values(incExtra || {}).flat()].find(x => x.id === id);
+  return ex ? ex.label : id;
+}
+
+function isRowEditedWithExtra(blockId, row, incExtra = {}) {
+  if (!row) return false;
+  const nonEmptyEntries = Object.entries(row).filter(([, val]) => String(val ?? "").trim() !== "");
+  if (!nonEmptyEntries.length) return false;
+  const b = findBlockDef(blockId) || Object.values(incExtra || {}).flat().find(x => x.id === blockId);
+  if (b?.seed?.length) {
+    const matchesSeed = b.seed.some(seedRow => {
+      const seedEntries = Object.entries(seedRow).filter(([, val]) => String(val ?? "").trim() !== "");
+      if (seedEntries.length !== nonEmptyEntries.length) return false;
+      return seedEntries.every(([k, val]) => String(row[k] ?? "").trim() === String(val ?? "").trim());
+    });
+    if (matchesSeed) return false;
+  }
+  return true;
+}
+
+function computeMergePlan(cur, inc) {
+  const curF = cur.f || {}, incF = inc.f || {};
+  const newFields = [], conflictFields = [];
+  Object.entries(incF).forEach(([id, val]) => {
+    const iv = String(val ?? "").trim();
+    if (!iv) return;
+    const cv = String(curF[id] ?? "").trim();
+    if (!cv) newFields.push(id);
+    else if (cv !== iv) conflictFields.push({ id, label: fieldLabelById(id, inc.extra) });
+  });
+  const curTabs = new Set((cur.customTabs || []).map(t => t.id));
+  const newTabs = (inc.customTabs || []).filter(t => !curTabs.has(t.id)).length;
+  let newExtras = 0;
+  Object.entries(inc.extra || {}).forEach(([tabId, arr]) => {
+    const existing = new Set((cur.extra?.[tabId] || []).map(x => x.id));
+    (arr || []).forEach(x => { if (!existing.has(x.id)) newExtras++; });
+  });
+  let newRows = 0;
+  Object.entries(inc.lists || {}).forEach(([id, rows]) => {
+    const sigs = new Set((cur.lists?.[id] || []).map(rowSig).filter(Boolean));
+    (rows || []).forEach(r => {
+      if (isRowEditedWithExtra(id, r, inc.extra)) {
+        const sig = rowSig(r);
+        if (sig && !sigs.has(sig)) { newRows++; sigs.add(sig); }
+      }
+    });
+  });
+  const newChecks = Object.entries(inc.checks || {}).filter(([k, v]) => v && !cur.checks?.[k]).length;
+  return { newFields: newFields.length, conflictFields, newTabs, newExtras, newRows, newChecks };
+}
+
+function applyMerge(cur, inc, overwriteConflicts = false) {
+  cur.f ??= {}; cur.lists ??= {}; cur.checks ??= {}; cur.extra ??= {}; cur.customTabs ??= [];
+  let addedFields = 0, updatedFields = 0, addedRows = 0, addedChecks = 0, addedSections = 0;
+
+  const curTabIds = new Set(cur.customTabs.map(t => t.id));
+  (inc.customTabs || []).forEach(t => {
+    if (!curTabIds.has(t.id)) { cur.customTabs.push({ ...t }); curTabIds.add(t.id); addedSections++; }
+  });
+  Object.entries(inc.extra || {}).forEach(([tabId, arr]) => {
+    cur.extra[tabId] ??= [];
+    const existing = new Set(cur.extra[tabId].map(x => x.id));
+    (arr || []).forEach(x => {
+      if (!existing.has(x.id)) { cur.extra[tabId].push({ ...x }); existing.add(x.id); }
+    });
+  });
+  Object.entries(inc.f || {}).forEach(([id, val]) => {
+    const iv = String(val ?? "").trim();
+    if (!iv) return;
+    const cv = String(cur.f[id] ?? "").trim();
+    if (!cv) { cur.f[id] = val; addedFields++; }
+    else if (cv !== iv && overwriteConflicts) { cur.f[id] = val; updatedFields++; }
+  });
+  Object.entries(inc.lists || {}).forEach(([id, rows]) => {
+    cur.lists[id] ??= [];
+    const sigs = new Set(cur.lists[id].map(rowSig).filter(Boolean));
+    let addedHere = 0;
+    (rows || []).forEach(r => {
+      if (isRowEditedWithExtra(id, r, inc.extra)) {
+        const sig = rowSig(r);
+        if (sig && !sigs.has(sig)) {
+          cur.lists[id].push({ ...r });
+          sigs.add(sig);
+          addedRows++;
+          addedHere++;
+        }
+      }
+    });
+    if (addedHere) {
+      cur.lists[id] = cur.lists[id].filter(r => Object.values(r).some(v => String(v ?? "").trim() !== ""));
+      if (!cur.lists[id].length) cur.lists[id] = [{}];
+    }
+  });
+  Object.entries(inc.checks || {}).forEach(([k, v]) => {
+    if (v && !cur.checks[k]) { cur.checks[k] = true; addedChecks++; }
+  });
+  cur.fireDrill ??= {};
+  Object.entries(inc.fireDrill || {}).forEach(([k, v]) => {
+    if (v) cur.fireDrill[k] = true;
+  });
+  if (inc.lastDryRun && (!cur.lastDryRun || inc.lastDryRun > cur.lastDryRun)) cur.lastDryRun = inc.lastDryRun;
+  if (inc.reviewed && (!cur.reviewed || inc.reviewed > cur.reviewed)) cur.reviewed = inc.reviewed;
+
+  const parts = [];
+  if (addedFields) parts.push(`+${addedFields} fields`);
+  if (updatedFields) parts.push(`${updatedFields} updated`);
+  if (addedRows) parts.push(`+${addedRows} rows`);
+  if (addedSections) parts.push(`+${addedSections} sections`);
+  if (addedChecks) parts.push(`+${addedChecks} checks`);
+  return parts.length ? `Merged (${parts.join(", ")})` : "Already up to date";
+}
+
 function promptUnlockPkg(pkg) {
   if (!hasCrypto()) return toast("Opening locked backups requires HTTPS, localhost, or Web Crypto support");
-  openDlg(`<h3>Unlock backup</h3><p class="hint">This replaces what's currently stored on this device.</p>
+  openDlg(`<h3>Unlock backup</h3><p class="hint">You can merge with this device or replace what's here.</p>
     <label class="f"><span>Passphrase</span><input type="password" id="pw" required></label>${btns("Unlock")}`);
   onGo(async () => {
+    let incoming;
     try {
       const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(pkg.iv) }, await keyFrom($("#pw").value, unb64(pkg.salt)), unb64(pkg.data));
-      S = JSON.parse(dec.decode(pt));
+      incoming = JSON.parse(dec.decode(pt));
+    } catch { return toast("Wrong passphrase"); }
+
+    if (!hasAnyContent()) {
+      S = incoming;
       const now = new Date().toISOString();
       S.lastBackup = now;
       if (!S.updated || S.updated > now) S.updated = now;
       norm(); save(true, false); render(); $("#dlg").close(); toast("Backup opened");
-    } catch { toast("Wrong passphrase"); }
+      return;
+    }
+
+    const plan = computeMergePlan(S, incoming);
+    const conflictPreview = plan.conflictFields.slice(0, 5).map(c => esc(c.label)).join(", ")
+      + (plan.conflictFields.length > 5 ? ` +${plan.conflictFields.length - 5} more` : "");
+    openDlg(`<h3>Backup unlocked</h3>
+      <div class="merge-summary">
+        <b>What's new in this backup:</b>
+        +${plan.newFields} empty fields filled · +${plan.newRows} table rows · +${plan.newTabs} sections · +${plan.newChecks} playbook checks
+        ${plan.conflictFields.length ? `<div class="merge-conflicts"><b>${plan.conflictFields.length} field(s) edited on both devices:</b> ${conflictPreview}</div>` : `<div style="margin-top:4px;color:var(--ink2)">No conflicting field edits.</div>`}
+      </div>
+      <div class="opt-list">
+        <label class="opt-card"><input type="radio" name="mact" value="merge-keep" checked><div><b>Smart merge (keep my edits on conflicts)</b><small>Adds missing answers, tables, and sections without overwriting what you already wrote here.</small></div></label>
+        <label class="opt-card"><input type="radio" name="mact" value="merge-inc"><div><b>Smart merge (prefer backup on conflicts)</b><small>Adds missing items and lets the backup win where both devices differ.</small></div></label>
+        <label class="opt-card"><input type="radio" name="mact" value="replace"><div><b>Replace everything on this device</b><small>Discards local answers and loads the backup as-is.</small></div></label>
+      </div>
+      ${btns("Apply")}`);
+    onGo(() => {
+      const choice = $("#dlgForm").querySelector('input[name="mact"]:checked').value;
+      if (choice === "replace") {
+        S = incoming;
+        const now = new Date().toISOString();
+        S.lastBackup = now;
+        if (!S.updated || S.updated > now) S.updated = now;
+        norm(); save(true, false); render(); $("#dlg").close(); toast("Backup replaced device data");
+      } else {
+        const msg = applyMerge(S, incoming, choice === "merge-inc");
+        norm(); save(true, true); render(); $("#dlg").close(); toast(msg);
+      }
+    });
   });
 }
 

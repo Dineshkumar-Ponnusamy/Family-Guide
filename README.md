@@ -15,9 +15,11 @@ Use a **private** repository anyway. Your section names alone can reveal things 
 
 ## Features
 
-- **Edit & Read modes:** Switch to **Read mode** so a stressed reader can tap phone numbers/links, check off playbook steps, and log calls without accidentally editing or seeing empty boxes.
+- **Edit & Read modes:** Switch to **Read mode** so a stressed reader can tap phone numbers/links, check off playbook steps, and log calls without accidentally editing or seeing empty boxes. Includes **A+** large text and **Contrast** toggles for 3 AM reading.
+- **Standalone Offline Copy & Smart Merge:** Export a self-contained `.html` locked copy that includes search, clickable playbook links, editable Call & claim log, Caregiver sheet printing, and **Save updated copy (.html)** so progress persists offline. **Open backup** supports **Smart Merge** to combine edits from both spouses without overwriting.
 - **Playbooks & Call Log:** Step-by-step action plans for hospital/incapacitation, death, money emergencies, and unreachable parents (caregiver), with clickable cross-links and a built-in **Call & claim log**.
-- **15-Minute Essentials & Search:** Jump straight to the 10 highest-impact items, or press `/` to search across every field, table, and playbook step.
+- **15-Minute Essentials & Search:** Jump straight to the 10 highest-impact items, or press `/` (with `↑`/`↓`/`Enter` navigation) to search across every field, table, and playbook step.
+- **Readiness Audit & 10-Minute Fire Drill:** Spots real-world gaps (solo-only bank accounts, missing retirement/life-insurance beneficiaries, missing phone/2FA unlock info, stale backups) and tracks a 5-step spouse dry-run.
 - **Modular Section Templates:** One-click templates under **+ Section** for Smart Home & Wi‑Fi, Crypto/Domains/Homelab, Small Business, Traveling/Caregiver, International/Expat Assets, and Aging Parents.
 - **Flexible Printing:** Print the full guide (with or without empty blanks), a **1-page Caregiver / Fridge Sheet**, or a **1-page Break-Glass Cover Sheet** for your safe.
 - **Check-Up Reminders:** Export a recurring 6-month `.ics` calendar reminder next to **Mark reviewed**.
