@@ -93,6 +93,7 @@ Use **Save backup → Standalone locked HTML (.html)**, store the file in two sa
 | `app.js` | Storage, rendering, readiness audit, smart merge, Shamir split, photo compression, AES-GCM backups |
 | `manifest.json` / `sw.js` / `icon*` / `apple-touch-icon.png` | Offline PWA & iOS/Android/Desktop icons |
 | `desktop/` & `.github/workflows/` | Optional Tauri v2 desktop app wrapper (Mac/Windows/Linux) & CI/Release workflows |
+| `shared/` & `native/apple/` | Shared data/crypto interop spec + pure native SwiftUI apps for macOS & iOS |
 | `SECURITY.md` | Threat model, cryptographic details & safe-use rules |
 | `CONTRIBUTING.md` | How to extend sections or add your country preset |
 
