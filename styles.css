@@ -257,6 +257,34 @@ body.read-mode .audit-pill{display:none!important}
 .lock-box{max-width:460px;width:100%;background:var(--card);border:2px solid var(--ink);border-radius:8px;padding:24px;box-shadow:6px 6px 0 var(--ink)}
 .lock-box h1{font-size:30px;margin:0 0 8px}
 
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
+.card-head h3{margin:0}
+.card-meta{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.card-badge{font-family:var(--mono);font-size:11px;color:var(--ink2);background:var(--paper);border:1px solid var(--rule);border-radius:999px;padding:2px 8px}
+.card-tog{font:600 12px var(--sans);border:1px solid var(--rule);background:var(--paper);color:var(--ink2);border-radius:999px;padding:2px 8px;cursor:pointer}
+.card-tog:hover{border-color:var(--ink);color:var(--ink)}
+.card.collapsed .card-body{display:none}
+body.read-mode .card.collapsed .card-body{display:block}
+body.read-mode .card-tog,body.read-mode .card-badge,body.read-mode .qchips{display:none!important}
+
+.qchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--rule)}
+.qchips-lbl{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;color:var(--mute);align-self:center;margin-right:2px}
+.qchip{font:500 12px var(--sans);border:1px dashed var(--rule);background:var(--paper);color:var(--ink2);border-radius:999px;padding:3px 10px;cursor:pointer;transition:.15s}
+.qchip:hover{border-color:var(--ink);color:var(--ink);background:var(--paper2)}
+.qchip.used{border-style:solid;border-color:#7aa67c;background:#eaf3ea;color:#1f3a2e}
+
+.exec-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:10px 0}
+@media (max-width:600px){.exec-grid{grid-template-columns:minmax(0,1fr)}}
+.exec-box{border:1px solid var(--rule);border-radius:4px;padding:9px 11px;background:var(--paper);break-inside:avoid}
+.exec-box.full{grid-column:1/-1}
+.exec-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-bottom:1px solid var(--rule);padding-bottom:4px;margin-bottom:6px}
+.exec-h h4{font-family:var(--serif);font-size:15.5px;margin:0}
+.exec-h button{font:600 11px var(--sans);border:none;background:none;color:var(--sky);cursor:pointer;padding:0}
+.exec-box ul{margin:0;padding-left:16px;font-size:12.5px;line-height:1.4}
+.exec-box li{margin:2px 0}
+.exec-box p{margin:3px 0;font-size:12.5px;line-height:1.4}
+.exec-box a{color:var(--sky);font-weight:600}
+
 body.large-text{font-size:18px;line-height:1.55}
 body.large-text input,body.large-text textarea,body.large-text select,body.large-text .ro-val{font-size:18px}
 body.large-text label.f span{font-size:12px}

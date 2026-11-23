@@ -30,9 +30,10 @@ const REGIONS = {
       d_legacy: { label: "Legacy contacts & Embassy/Consulate contacts", ph: "Apple, Google, Indian Consulate" }
     },
     listOverrides: {
-      accounts: { hint: "List both US (checking/savings) and India (NRE/NRO/FCNR) accounts. Mark Joint vs. Solo; in India, check Nominee vs. Legal Heir." },
-      invest: { hint: "US (401k, IRA, HSA, brokerage) & India (EPF, PPF, NPS, Mutual Funds, Demat). Beneficiaries/nominees matter—separate US & India wills prevent probate delays." },
-      doclocs: { hint: "Include I-797, I-94, I-140/I-485, EAD, Passports, OCI cards, PAN, Aadhaar, and both US & India Wills." }
+      accounts: { hint: "List both US (checking/savings) and India (NRE/NRO/FCNR) accounts. Mark Joint vs. Solo; in India, check Nominee vs. Legal Heir.", extraSuggestions: ["NRE Account", "NRO Account", "FCNR Deposit"] },
+      invest: { hint: "US (401k, IRA, HSA, brokerage) & India (EPF, PPF, NPS, Mutual Funds, Demat). Beneficiaries/nominees matter—separate US & India wills prevent probate delays.", extraSuggestions: ["EPF / VPF", "PPF", "NPS", "Mutual Funds / Demat", "Sovereign Gold Bonds"] },
+      property: { extraSuggestions: ["India Property / Flat", "Gold / Bank Locker"] },
+      doclocs: { hint: "Include I-797, I-94, I-140/I-485, EAD, Passports, OCI cards, PAN, Aadhaar, and both US & India Wills.", extraSuggestions: ["PAN Card", "Aadhaar Card", "OCI Card", "I-797 / I-94 / I-140", "India Property Sale Deed"] }
     },
     stepOverrides: {
       g9: { d: "Contact US Social Security (1-800-772-1213) for survivor benefits, and contact the Indian Embassy/Consulate for death registration, OCI/passport cancellation, or repatriation support." },
@@ -56,9 +57,10 @@ const REGIONS = {
       k_911: { label: "If someone is hurt", ph: "Call 112 (or 102 / 108 ambulance). Say your name, our address, and what happened." }
     },
     listOverrides: {
-      accounts: { hint: "Mark Joint (Either or Survivor) vs. Single, and verify the registered Nominee (note: a bank nominee is a custodian; legal heirs/will govern final ownership)." },
-      invest: { hint: "EPF, PPF, NPS, Mutual Funds, Demat, Fixed Deposits, Sovereign Gold Bonds. Verify registered Nominees & legal will." },
-      doclocs: { hint: "Include PAN card, Aadhaar card, Passports, Property sale deed, Demat/Share details, and latest ITRs." }
+      accounts: { hint: "Mark Joint (Either or Survivor) vs. Single, and verify the registered Nominee (note: a bank nominee is a custodian; legal heirs/will govern final ownership).", extraSuggestions: ["NRE / NRO Account", "Fixed Deposit (FD)", "PPF Account"] },
+      invest: { hint: "EPF, PPF, NPS, Mutual Funds, Demat, Fixed Deposits, Sovereign Gold Bonds. Verify registered Nominees & legal will.", extraSuggestions: ["EPF / VPF", "PPF", "NPS", "Mutual Funds / Demat", "Sovereign Gold Bonds"] },
+      property: { extraSuggestions: ["Gold / Bank Locker", "Ancestral Property"] },
+      doclocs: { hint: "Include PAN card, Aadhaar card, Passports, Property sale deed, Demat/Share details, and latest ITRs.", extraSuggestions: ["PAN Card", "Aadhaar Card", "Property Sale Deed", "Demat / Share Certificates", "Ration / Voter ID"] }
     },
     stepOverrides: {
       h1: { d: "Call 112 (or 100/102/108) if anyone is in danger. It's okay to let someone else drive or make calls for you." },
@@ -106,8 +108,8 @@ const REGIONS = {
       k_911: { label: "If someone is hurt", ph: "Call 999 (or 112). Say your name, our address, and what happened." }
     },
     listOverrides: {
-      invest: { hint: "Workplace pensions, SIPP, Stocks & Shares ISA, LISA, Premium Bonds. Check Expression of Wishes forms." },
-      doclocs: { hint: "Include Passports, Birth/Marriage certificates, NI numbers, Property title deeds, and LPA documents." }
+      invest: { hint: "Workplace pensions, SIPP, Stocks & Shares ISA, LISA, Premium Bonds. Check Expression of Wishes forms.", extraSuggestions: ["Stocks & Shares ISA", "SIPP", "Workplace Pension", "Premium Bonds"] },
+      doclocs: { hint: "Include Passports, Birth/Marriage certificates, NI numbers, Property title deeds, and LPA documents.", extraSuggestions: ["National Insurance #", "LPA Documents"] }
     },
     stepOverrides: {
       h1: { d: "Call 999 if anyone is in danger. It's okay to let someone else drive or make calls for you." },
@@ -131,8 +133,8 @@ const REGIONS = {
       d_fpoa: { label: "Enduring Power of Attorney (Financial)" }
     },
     listOverrides: {
-      invest: { hint: "RRSP, TFSA, RESP, FHSA, LIRA, non-registered accounts. Verify designated beneficiaries." },
-      doclocs: { hint: "Include SIN cards, Passports, Birth/Marriage certificates, Provincial health cards, and NOAs (CRA)." }
+      invest: { hint: "RRSP, TFSA, RESP, FHSA, LIRA, non-registered accounts. Verify designated beneficiaries.", extraSuggestions: ["RRSP", "TFSA", "RESP", "FHSA"] },
+      doclocs: { hint: "Include SIN cards, Passports, Birth/Marriage certificates, Provincial health cards, and NOAs (CRA).", extraSuggestions: ["SIN Card", "CRA Notice of Assessment"] }
     },
     stepOverrides: {
       h4: { d: "Ask HR about short-term disability, EI sickness benefits, and salary continuation." },
@@ -154,8 +156,8 @@ const REGIONS = {
       k_911: { label: "If someone is hurt", ph: "Call 000 (Triple Zero). Say your name, our address, and what happened." }
     },
     listOverrides: {
-      invest: { hint: "Superannuation funds, SMSF, shares/ETFs. Check whether Super has a Binding Death Benefit Nomination (super sits outside the will!)." },
-      doclocs: { hint: "Include Passports, Birth/Marriage certificates, TFN, Medicare card, Super statements, and Title deeds." }
+      invest: { hint: "Superannuation funds, SMSF, shares/ETFs. Check whether Super has a Binding Death Benefit Nomination (super sits outside the will!).", extraSuggestions: ["Superannuation", "SMSF", "Shares / ETFs"] },
+      doclocs: { hint: "Include Passports, Birth/Marriage certificates, TFN, Medicare card, Super statements, and Title deeds.", extraSuggestions: ["TFN / Medicare Card", "Super Binding Nomination"] }
     },
     stepOverrides: {
       h1: { d: "Call 000 if anyone is in danger. It's okay to let someone else drive or make calls for you." },

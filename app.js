@@ -48,8 +48,21 @@ function rField(f) {
 }
 function rList(b) {
   const ov = getRegion().listOverrides?.[b.id];
-  if (!ov) return b;
-  return { ...b, hint: ov.hint ?? b.hint, cols: ov.colLabels ? b.cols.map(([k, l]) => [k, ov.colLabels[k] || l]) : b.cols };
+  const baseSug = b.suggestions || [];
+  const extraSug = ov?.extraSuggestions || [];
+  const mergedSug = [...baseSug, ...extraSug.filter(s => !baseSug.includes(s))];
+  if (!ov && !mergedSug.length) return b;
+  return {
+    ...b,
+    hint: ov?.hint ?? b.hint,
+    cols: ov?.colLabels ? b.cols.map(([k, l]) => [k, ov.colLabels[k] || l]) : b.cols,
+    suggestions: mergedSug
+  };
+}
+const collapsedCards = new Set();
+function cardHeadHtml(title, badgeText, collapseKey) {
+  const isCol = collapsedCards.has(collapseKey);
+  return `<div class="card-head"><h3>${esc(title)}</h3><div class="card-meta">${badgeText ? `<span class="card-badge">${esc(badgeText)}</span>` : ""}${!S.readMode ? `<button type="button" class="card-tog" data-togcard="${esc(collapseKey)}" title="Collapse or expand">${isCol ? "▸" : "▾"}</button>` : ""}</div></div>`;
 }
 function rStep(s) {
   const ov = getRegion().stepOverrides?.[s.id];
@@ -116,7 +129,8 @@ function isRowUserEdited(blockId, row) {
   if (!row) return false;
   const nonEmptyEntries = Object.entries(row).filter(([, val]) => String(val ?? "").trim() !== "");
   if (!nonEmptyEntries.length) return false;
-  const b = findBlockDef(blockId);
+  const rawDef = findBlockDef(blockId);
+  const b = rawDef ? rList(rawDef) : null;
   if (b?.seed?.length) {
     const matchesSeed = b.seed.some(seedRow => {
       const seedEntries = Object.entries(seedRow).filter(([, val]) => String(val ?? "").trim() !== "");
@@ -124,6 +138,11 @@ function isRowUserEdited(blockId, row) {
       return seedEntries.every(([k, val]) => String(row[k] ?? "").trim() === String(val ?? "").trim());
     });
     if (matchesSeed) return false;
+  }
+  if (b?.suggestions?.length && nonEmptyEntries.length === 1) {
+    const scol = b.suggestCol || b.cols?.[0]?.[0];
+    const [k, v] = nonEmptyEntries[0];
+    if (k === scol && b.suggestions.some(s => s.toLowerCase() === String(v).trim().toLowerCase())) return false;
   }
   return true;
 }
@@ -135,6 +154,7 @@ function rowHasFilledValue(id, row) {
 function hasAnyContent() {
   if (Object.values(S.f).some(v => String(v ?? "").trim() !== "")) return true;
   if (Object.keys(S.lists).some(id => (S.lists[id] || []).some(r => rowHasFilledValue(id, r)))) return true;
+  if ((S.photos || []).length) return true;
   if (S.customTabs.length || Object.keys(S.extra).length) return true;
   return false;
 }
@@ -173,13 +193,31 @@ function listRows(id, cols, editable = !S.readMode) {
   }).join("");
 }
 
+function qchipsHtml(id, b) {
+  const sugs = b?.suggestions || [];
+  if (S.readMode || !sugs.length) return "";
+  const scol = b.suggestCol || b.cols?.[0]?.[0];
+  const rows = S.lists[id] || [];
+  const used = new Set(rows.map(r => String(r[scol] || "").trim().toLowerCase()).filter(Boolean));
+  return `<div class="qchips" id="qchips-${esc(id)}"><span class="qchips-lbl">Quick-add:</span>${sugs.map(lbl => {
+    const isUsed = used.has(lbl.toLowerCase());
+    return `<button type="button" class="qchip${isUsed ? " used" : ""}" data-qadd="${esc(id)}::${esc(lbl)}">${isUsed ? "✓ " : "+ "}${esc(lbl)}</button>`;
+  }).join("")}</div>`;
+}
+
 function listCard(id, title, hint, cols, extra = "", opts = {}) {
   const editable = !S.readMode || opts.crisisEditable;
   const rows = S.lists[id] || [];
-  const hasAny = rows.some(r => rowHasFilledValue(id, r));
+  const filledCount = rows.filter(r => rowHasFilledValue(id, r)).length;
+  const hasAny = filledCount > 0;
   if (S.readMode && !hasAny && !opts.crisisEditable) return "";
   const crisisAdd = opts.crisisEditable ? " crisis-add" : "";
-  return `<div class="card${hasAny ? "" : " is-empty"}" data-block-id="${esc(id)}" data-block-title="${esc(title)}">${extra}<h3>${esc(title)}</h3>${hint ? `<p class="hint">${esc(hint)}</p>` : ""}<div class="rows" id="rows-${esc(id)}">${listRows(id, cols, editable)}</div>${editable ? `<button type="button" class="add${crisisAdd}" data-add="${esc(id)}">+ Add a row</button>` : ""}</div>`;
+  const rawDef = opts.block || findBlockDef(id);
+  const b = rawDef ? rList(rawDef) : null;
+  const colKey = "l:" + id;
+  const isCol = !S.readMode && collapsedCards.has(colKey);
+  const badge = filledCount ? `${filledCount} filled` : "";
+  return `<div class="card${hasAny ? "" : " is-empty"}${isCol ? " collapsed" : ""}" data-block-id="${esc(id)}" data-block-title="${esc(title)}" data-ckey="${esc(colKey)}">${extra}${cardHeadHtml(title, badge, colKey)}<div class="card-body">${hint ? `<p class="hint">${esc(hint)}</p>` : ""}<div class="rows" id="rows-${esc(id)}">${listRows(id, cols, editable)}</div>${editable ? `<button type="button" class="add${crisisAdd}" data-add="${esc(id)}">+ Add a row</button>` : ""}${qchipsHtml(id, b)}</div></div>`;
 }
 
 function essentialsHtml() {
@@ -231,18 +269,22 @@ function photosBlockHtml(b) {
 function block(b) {
   switch (b.type) {
     case "fields": {
-      const anyFilled = b.fields.some(f => String(S.f[f[0]] || "").trim() !== "");
+      const filledN = b.fields.filter(f => String(S.f[f[0]] || "").trim() !== "").length;
+      const anyFilled = filledN > 0;
       if (S.readMode && !anyFilled) return "";
-      return `<div class="card${anyFilled ? "" : " is-empty"}" data-block-title="${esc(b.title)}"><h3>${esc(b.title)}</h3>${b.hint ? `<p class="hint">${esc(b.hint)}</p>` : ""}<div class="grid2">${
+      const colKey = "f:" + b.title;
+      const isCol = !S.readMode && collapsedCards.has(colKey);
+      const badge = filledN ? `${filledN}/${b.fields.length}` : "";
+      return `<div class="card${anyFilled ? "" : " is-empty"}${isCol ? " collapsed" : ""}" data-block-title="${esc(b.title)}" data-ckey="${esc(colKey)}">${cardHeadHtml(b.title, badge, colKey)}<div class="card-body">${b.hint ? `<p class="hint">${esc(b.hint)}</p>` : ""}<div class="grid2">${
         b.fields.map(f => rField(f)).map(rf => {
           const empty = !String(S.f[rf[0]] || "").trim();
           if (S.readMode && empty) return "";
           return `<div class="${empty ? "is-empty" : ""}" style="${rf[3] ? "grid-column:1/-1" : ""}">${field(...rf)}</div>`;
-        }).join("")}</div></div>`;
+        }).join("")}</div></div></div>`;
     }
     case "list": {
       const lb = rList(b);
-      return listCard(lb.id, lb.title, lb.hint, lb.cols, "", { crisisEditable: lb.crisisEditable });
+      return listCard(lb.id, lb.title, lb.hint, lb.cols, "", { crisisEditable: lb.crisisEditable, block: lb });
     }
     case "photos": return photosBlockHtml(b);
     case "glance": {
@@ -386,13 +428,14 @@ function render() {
   $("#tabs").innerHTML = tabs.map(t => `<button type="button" data-tab="${esc(t.id)}" class="${S.tab === t.id ? "on" : ""} ${t.custom ? "custom" : ""}">${esc(t.label)}</button>`).join("")
     + `<button type="button" class="newtab" data-act="newtab">+ Section</button><span class="spacer"></span>`
     + `<button type="button" class="tool${S.readMode ? " on" : ""}" data-act="toggleRead">${S.readMode ? "Edit mode" : "Read mode"}</button>`
+    + `<button type="button" class="tool" data-act="summary">1-page Summary</button>`
     + `<button type="button" class="tool" data-act="backup">Save backup</button>`
     + `<button type="button" class="tool" data-act="restore">Open backup</button>`
     + `<button type="button" class="tool" data-act="print">Print</button>`
     + `<button type="button" class="tool" data-act="project">GitHub</button>`;
 
   $("#modeBanner").innerHTML = S.readMode
-    ? `<div class="mode-banner"><span><b>Read mode</b> — showing filled details only so nothing gets edited by accident. Playbook checks and the Call &amp; claim log stay interactive.</span><button type="button" data-act="toggleRead">Switch to Edit mode</button></div>`
+    ? `<div class="mode-banner"><span><b>Read mode</b> — showing filled details only so nothing gets edited by accident. Playbook checks and the Call &amp; claim log stay interactive.</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" data-act="summary">1-page Summary</button><button type="button" data-act="toggleRead">Switch to Edit mode</button></div></div>`
     : "";
 
   $("#panels").innerHTML = tabs.map(t => {
@@ -536,6 +579,10 @@ function jumpTo(tabId, blockKey = "", fieldId = "", trackKey = "") {
   }
   if (target) {
     const card = target.closest(".card,.glance,.kids,.step") || target;
+    if (card.classList.contains("collapsed") && card.dataset.ckey) {
+      card.classList.remove("collapsed");
+      collapsedCards.delete(card.dataset.ckey);
+    }
     card.scrollIntoView({ behavior: "smooth", block: "center" });
     card.classList.remove("flash");
     void card.offsetWidth;
@@ -556,11 +603,12 @@ function runSearch(q) {
   if (!term) { res.hidden = true; res.innerHTML = ""; return; }
   const hits = [];
   const push = (tabId, tabLabel, title, sub, blockKey = "", fieldId = "", trackKey = "") => {
-    if (hits.length >= 12) return;
+    if (hits.length >= 15) return;
     hits.push({ tabId, tabLabel, title, sub, blockKey, fieldId, trackKey });
   };
 
-  GLANCE.forEach(([id, label]) => {
+  GLANCE.forEach(rawG => {
+    const [id, label] = rField(rawG);
     const val = String(S.f[id] || "");
     if (label.toLowerCase().includes(term) || val.toLowerCase().includes(term)) {
       push("start", "Start here", label, val || "Quick glance", "If you read nothing else", id);
@@ -570,7 +618,8 @@ function runSearch(q) {
   allTabs().forEach(t => {
     (t.blocks || []).forEach(b => {
       if (b.type === "fields") {
-        b.fields.forEach(([id, label]) => {
+        b.fields.forEach(rawF => {
+          const [id, label] = rField(rawF);
           const val = String(S.f[id] || "");
           if (label.toLowerCase().includes(term) || val.toLowerCase().includes(term) || b.title.toLowerCase().includes(term)) {
             push(t.id, t.label, label, val || b.title, b.title, id);
@@ -578,11 +627,22 @@ function runSearch(q) {
         });
       }
       if (b.type === "list") {
-        const rows = S.lists[b.id] || [];
+        const lb = rList(b);
+        const rows = S.lists[lb.id] || [];
         const matchedRow = rows.find(r => Object.values(r).some(v => String(v || "").toLowerCase().includes(term)));
-        if (b.title.toLowerCase().includes(term) || matchedRow) {
-          const preview = matchedRow ? Object.values(matchedRow).filter(Boolean).join(" · ") : (b.hint || "Table");
-          push(t.id, t.label, b.title, preview, b.id);
+        const matchedSug = (lb.suggestions || []).find(s => s.toLowerCase().includes(term));
+        const hintMatch = (lb.hint || "").toLowerCase().includes(term);
+        if (lb.title.toLowerCase().includes(term) || matchedRow || matchedSug || hintMatch) {
+          const preview = matchedRow
+            ? Object.values(matchedRow).filter(Boolean).join(" · ")
+            : (matchedSug ? `Quick-add option: ${matchedSug}` : (lb.hint || "Table"));
+          push(t.id, t.label, lb.title, preview, lb.id);
+        }
+      }
+      if (b.type === "photos") {
+        const mp = (S.photos || []).find(p => p.label.toLowerCase().includes(term));
+        if (b.title.toLowerCase().includes(term) || mp) {
+          push(t.id, t.label, b.title, mp ? mp.label : (b.hint || "Reference photos"), b.id);
         }
       }
     });
@@ -602,7 +662,8 @@ function runSearch(q) {
     });
   });
 
-  KIDS.forEach(([id, , label]) => {
+  KIDS.forEach(([id, , t, ph]) => {
+    const [, label] = rField([id, t, ph]);
     const val = String(S.f[id] || "");
     if (label.toLowerCase().includes(term) || val.toLowerCase().includes(term)) {
       push("kids", "For the kids", label, val || "Kids page", "For the kids", id);
@@ -612,7 +673,8 @@ function runSearch(q) {
     push("start", "Start here", "A note to you", String(S.f.letter || "").slice(0, 80) || "Personal letter", "A note to you", "letter");
   }
   Object.entries(PLAYBOOK).forEach(([tk, p]) => {
-    p.phases.forEach(ph => ph.steps.forEach(s => {
+    p.phases.forEach(ph => ph.steps.forEach(rawS => {
+      const s = rStep(rawS);
       if (s.t.toLowerCase().includes(term) || s.d.toLowerCase().includes(term)) {
         push("start", "Playbook", s.t, s.d, s.id, "", tk);
       }
@@ -738,6 +800,30 @@ document.addEventListener("click", e => {
   if (d.tab) { S.tab = d.tab; save(true, false); render(); scrollTo({ top: 0, behavior: "smooth" }); }
   if (d.track) { S.track = d.track; save(true, false); document.querySelectorAll("[data-track]").forEach(b => b.classList.toggle("on", b.dataset.track === d.track)); $("#pb").innerHTML = playbook(); trackProgress(); }
   if (d.add) { S.lists[d.add].push({}); save(true); relist(d.add); }
+  if (d.qadd) {
+    const [id, lbl] = d.qadd.split("::");
+    const rawDef = findBlockDef(id);
+    const b = rawDef ? rList(rawDef) : null;
+    const colKey = b?.suggestCol || b?.cols?.[0]?.[0] || "name";
+    S.lists[id] ??= [];
+    S.lists[id].push({ [colKey]: lbl });
+    save(true, false);
+    relist(id);
+    const rowsWrap = $("#rows-" + CSS.escape(id));
+    const lastRow = rowsWrap?.lastElementChild;
+    const targetInp = lastRow ? Array.from(lastRow.querySelectorAll("input")).find(x => !x.value.trim()) || lastRow.querySelector("input") : null;
+    if (targetInp && typeof targetInp.focus === "function") targetInp.focus();
+  }
+  if (d.togcard) {
+    const key = d.togcard;
+    if (collapsedCards.has(key)) collapsedCards.delete(key);
+    else collapsedCards.add(key);
+    const card = e.target.closest(".card");
+    if (card) {
+      card.classList.toggle("collapsed", collapsedCards.has(key));
+      e.target.textContent = collapsedCards.has(key) ? "▸" : "▾";
+    }
+  }
   if (d.del) {
     const [id, i] = d.del.split(":");
     const row = S.lists[id]?.[+i];
@@ -752,6 +838,7 @@ document.addEventListener("click", e => {
   if (d.deltab) confirmDlg("Delete this whole section and everything in it?", () => { (S.extra[d.deltab] || []).forEach(x => { delete S.f[x.id]; delete S.lists[x.id]; }); delete S.extra[d.deltab]; S.customTabs = S.customTabs.filter(t => t.id !== d.deltab); S.tab = "start"; save(true); render(); });
   if (d.act === "newtab") newTabDialog();
   if (d.act === "toggleRead") { S.readMode = !S.readMode; save(true, false); render(); }
+  if (d.act === "summary") summaryDialog();
   if (d.act === "toggleLarge") { S.largeText = !S.largeText; save(true, false); render(); }
   if (d.act === "toggleContrast") { S.highContrast = !S.highContrast; save(true, false); render(); }
   if (d.act === "lockBrowser") lockBrowserDialog();
@@ -784,11 +871,19 @@ document.addEventListener("change", e => {
 });
 
 function relist(id) {
-  const b = findBlockDef(id);
+  const rawDef = findBlockDef(id);
+  const b = rawDef ? rList(rawDef) : null;
   const rowsEl = $("#rows-" + CSS.escape(id));
   if (rowsEl && b) rowsEl.innerHTML = listRows(id, b.cols, !S.readMode || b.crisisEditable);
   const card = rowsEl?.closest(".card");
-  if (card) card.classList.toggle("is-empty", !(S.lists[id] || []).some(r => rowHasFilledValue(id, r)));
+  if (card) {
+    const filled = (S.lists[id] || []).filter(r => rowHasFilledValue(id, r)).length;
+    card.classList.toggle("is-empty", !filled);
+    const badge = card.querySelector(".card-badge");
+    if (badge) badge.textContent = filled ? `${filled} filled` : "";
+    const qc = card.querySelector("#qchips-" + CSS.escape(id));
+    if (qc && b) qc.outerHTML = qchipsHtml(id, b);
+  }
 }
 
 /* ---------- dialogs ---------- */
@@ -1069,12 +1164,108 @@ function renderCoverSheet(passHint, fileLoc) {
   </div>`;
 }
 
+function renderExecutiveSummaryHtml(forPrint = false) {
+  const f = id => String(S.f[id] || "").trim();
+  const rowsOf = id => (S.lists[id] || []).filter(r => rowHasFilledValue(id, r));
+  const val = txt => forPrint ? esc(txt) : linkify(txt);
+  const jmpBtn = (tab, block) => forPrint ? "" : `<button type="button" data-ej="${esc(tab)}::${esc(block)}">Details →</button>`;
+
+  const first = rowsOf("first");
+  const pros = rowsOf("pros");
+  const accts = rowsOf("accounts");
+  const invest = rowsOf("invest");
+  const ins = rowsOf("insurance");
+  const bills = rowsOf("bills");
+  const debts = rowsOf("debts");
+  const prop = rowsOf("property");
+  const docs = rowsOf("doclocs");
+  const kidsInfo = rowsOf("kids_info");
+  const pets = rowsOf("pets");
+
+  const line = (label, v) => v ? `<p><b>${esc(label)}:</b> ${val(v)}</p>` : "";
+  const shutoffs = [["Water", f("hk_water")], ["Gas", f("hk_gas")], ["Breaker", f("hk_breaker")], ["Spare keys", f("hk_spare")]].filter(([, v]) => v);
+
+  return `<div class="${forPrint ? "sheet" : ""}">
+    ${forPrint ? `<h1>Our Family Field Guide — 1-Page Summary</h1><p class="sheet-sub">${esc(getRegion().label)} · Updated ${new Date().toLocaleDateString()} · Search or open the digital guide for full notes, scripts &amp; photos.</p>` : ""}
+    <div class="exec-grid">
+      <div class="exec-box">
+        <div class="exec-h"><h4>1. Call First &amp; Key Pros</h4>${jmpBtn("contacts", "first")}</div>
+        ${line("Call first", f("q_first"))}
+        ${first.length ? `<ul>${first.map(r => `<li><b>${esc(r.name || r.rel || "Contact")}</b>${r.rel ? ` (${esc(r.rel)})` : ""}: ${val(r.phone || "")}</li>`).join("")}</ul>` : ""}
+        ${pros.length ? `<ul>${pros.slice(0, 6).map(r => `<li><b>${esc(r.role || "Pro")}:</b> ${esc(r.name || "")} ${val(r.phone || r.email || "")}</li>`).join("")}</ul>` : ""}
+        ${!f("q_first") && !first.length && !pros.length ? `<p style="color:var(--mute)">No contacts filled yet.</p>` : ""}
+      </div>
+
+      <div class="exec-box">
+        <div class="exec-h"><h4>2. Money, Accounts &amp; Debts</h4>${jmpBtn("money", "accounts")}</div>
+        ${line("Monthly spend", f("m_monthly"))}
+        ${line("Runway / cash", [f("q_runway") || f("m_runway"), f("m_cash")].filter(Boolean).join(" · "))}
+        ${accts.length ? `<ul>${accts.map(r => `<li><b>${esc(r.inst || r.type || "Account")}</b> (${esc(r.type || "")}${r.own ? `, ${esc(r.own)}` : ""}${r.last4 ? ` · *${esc(r.last4)}` : ""})</li>`).join("")}</ul>` : ""}
+        ${debts.length ? `<p style="margin-top:4px"><b>Loans / Debts:</b> ${debts.map(r => `${esc(r.type || r.name)}${r.bal ? ` (${esc(r.bal)})` : ""}`).join(" · ")}</p>` : ""}
+        ${bills.length ? `<p><b>Key Bills:</b> ${bills.slice(0, 6).map(r => `${esc(r.name)}${r.amt ? ` ${esc(r.amt)}` : ""}`).join(" · ")}</p>` : ""}
+      </div>
+
+      <div class="exec-box full">
+        <div class="exec-h"><h4>3. Insurance &amp; Retirement Coverage</h4>${jmpBtn("money", "insurance")}</div>
+        ${line("Total life cover", f("q_life"))}
+        ${ins.length ? `<ul>${ins.map(r => `<li><b>${esc(r.type || "Policy")}:</b> ${[r.co, r.amt, r.benef ? `Benef: ${r.benef}` : "", r.pol ? `*${r.pol}` : "", r.phone].filter(Boolean).map(x => val(x)).join(" · ")}</li>`).join("")}</ul>` : `<p style="color:var(--mute)">No insurance policies filled yet.</p>`}
+        ${invest.length ? `<p style="margin-top:4px"><b>Retirement / Investments:</b> ${invest.map(r => `${esc(r.inst || "")} ${esc(r.type || "")}${r.benef ? ` (Benef: ${esc(r.benef)})` : ""}`).join(" · ")}</p>` : ""}
+      </div>
+
+      <div class="exec-box">
+        <div class="exec-h"><h4>4. Papers, Phone &amp; Property</h4>${jmpBtn("docs", "Legal papers")}</div>
+        ${line("Papers location", f("q_binder"))}
+        ${line("Will / trust", f("d_will"))}
+        ${line("Directive / POA", [f("d_hcd"), f("d_fpoa")].filter(Boolean).join(" · "))}
+        ${line("Phone / Vault", [f("d_phone"), f("d_pm")].filter(Boolean).join(" · "))}
+        ${prop.length ? `<p><b>Property / Titles:</b> ${prop.map(r => `${esc(r.what)}${r.where ? ` (${esc(r.where)})` : ""}`).join(" · ")}</p>` : ""}
+        ${docs.length ? `<p><b>Docs:</b> ${docs.slice(0, 5).map(r => `${esc(r.doc)} → ${esc(r.where)}`).join(" · ")}</p>` : ""}
+      </div>
+
+      <div class="exec-box">
+        <div class="exec-h"><h4>5. Home, Kids &amp; Pets</h4>${jmpBtn("kids", "")}</div>
+        ${line("Address", f("k_home"))}
+        ${line("Safe word", f("k_safe"))}
+        ${kidsInfo.length ? `<ul>${kidsInfo.map(r => `<li><b>${esc(r.child || "Child")}:</b> ${[r.school, r.pickup].filter(Boolean).map(esc).join(" · ")}</li>`).join("")}</ul>` : ""}
+        ${pets.length ? `<ul>${pets.map(r => `<li><b>${esc(r.name || "Pet")}:</b> ${[r.food, r.vet].filter(Boolean).map(esc).join(" · ")}</li>`).join("")}</ul>` : ""}
+        ${shutoffs.length ? `<p><b>Shut-offs:</b> ${shutoffs.map(([k, v]) => `${esc(k)}: ${esc(v)}`).join(" · ")}</p>` : ""}
+      </div>
+    </div>
+  </div>`;
+}
+
+function summaryDialog() {
+  openDlg(`<h3>1-Page Family Executive Summary</h3>
+    <p class="hint">Everything critical on one screen. Click <b>Details →</b> on any box to open that section, or search for anything.</p>
+    ${renderExecutiveSummaryHtml(false)}
+    <div class="btns">
+      <button type="button" class="btn" id="sumSearch">Search full guide</button>
+      <button type="button" class="btn" id="sumPrint">Print 1-page summary</button>
+      <button type="button" class="btn primary" id="cancelDlg">Close</button>
+    </div>`, true);
+  $("#cancelDlg").onclick = () => $("#dlg").close();
+  $("#sumSearch").onclick = () => { $("#dlg").close(); $("#searchIn").focus(); };
+  $("#sumPrint").onclick = () => {
+    $("#dlg").close();
+    $("#printSheet").innerHTML = renderExecutiveSummaryHtml(true);
+    printWithClass("print-sheet-only");
+  };
+  $("#dlgForm").querySelectorAll("[data-ej]").forEach(btn => {
+    btn.onclick = () => {
+      const [tab, blk] = btn.dataset.ej.split("::");
+      $("#dlg").close();
+      jumpTo(tab, blk);
+    };
+  });
+}
+
 function printDialog() {
   openDlg(`<h3>Print options</h3>
     <div class="opt-list">
-      <label class="opt-card"><input type="radio" name="pmode" value="filled" checked><div><b>Full guide — filled details only</b><small>Omits empty fields and blank rows so your binder stays clean.</small></div></label>
+      <label class="opt-card"><input type="radio" name="pmode" value="summary" checked><div><b>1-page Family Executive Summary</b><small>High-signal overview of contacts, money, insurance, papers, titles, kids &amp; shut-offs.</small></div></label>
+      <label class="opt-card"><input type="radio" name="pmode" value="filled"><div><b>Full guide — filled details only</b><small>Omits empty fields and blank rows so your binder stays clean.</small></div></label>
       <label class="opt-card"><input type="radio" name="pmode" value="all"><div><b>Full guide — include blanks</b><small>Great if you want space to fill things in by hand.</small></div></label>
-      <label class="opt-card"><input type="radio" name="pmode" value="caregiver"><div><b>1-page Caregiver / Fridge Sheet</b><small>Home address for 911, first contacts, kids' pickup/allergies, pets, and shut-offs.</small></div></label>
+      <label class="opt-card"><input type="radio" name="pmode" value="caregiver"><div><b>1-page Caregiver / Fridge Sheet</b><small>Home address for ${esc(getRegion().emergency)}, first contacts, kids' pickup/allergies, pets, and shut-offs.</small></div></label>
       <label class="opt-card"><input type="radio" name="pmode" value="cover"><div><b>1-page Break-Glass Cover Sheet</b><small>Instructions for your safe or filing box showing where the digital guide and passphrase live.</small></div></label>
     </div>
     <div id="coverOpts" hidden style="margin-top:8px">
@@ -1088,7 +1279,8 @@ function printDialog() {
   onGo(() => {
     const mode = $("#dlgForm").querySelector('input[name="pmode"]:checked').value;
     $("#dlg").close();
-    if (mode === "filled") printWithClass("print-hide-empty");
+    if (mode === "summary") { $("#printSheet").innerHTML = renderExecutiveSummaryHtml(true); printWithClass("print-sheet-only"); }
+    else if (mode === "filled") printWithClass("print-hide-empty");
     else if (mode === "all") printWithClass("");
     else if (mode === "caregiver") { renderCaregiverSheet(); printWithClass("print-sheet-only"); }
     else if (mode === "cover") { renderCoverSheet($("#covHint").value.trim(), $("#covLoc").value.trim()); printWithClass("print-sheet-only"); }
@@ -1357,6 +1549,10 @@ function isRowFilled(id, r) {
     });
     if (isSeed) return false;
   }
+  if (blk && blk.suggestions && ne.length === 1) {
+    const scol = blk.suggestCol || blk.cols?.[0]?.[0];
+    if (ne[0][0] === scol && blk.suggestions.some(s => s.toLowerCase() === String(ne[0][1]).trim().toLowerCase())) return false;
+  }
   return true;
 }
 let unlockedPass = "", useSss = false;
@@ -1452,6 +1648,7 @@ function renderAll(root, S) {
       + '<div class="acts" style="display:flex;gap:6px;flex-wrap:wrap">'
       + '<button type="button" class="btn'+(S.largeText?" on":"")+'" id="saLg">A+</button>'
       + '<button type="button" class="btn'+(S.highContrast?" on":"")+'" id="saHc">Contrast</button>'
+      + '<button type="button" class="btn" id="saSum">1-page Summary</button>'
       + '<button type="button" class="btn" id="saCare">Caregiver sheet</button>'
       + '<button type="button" class="btn" id="dlJson">Download .json</button>'
       + '<button type="button" class="btn primary" id="saveHtml">Save updated copy (.html)</button>'
@@ -1492,6 +1689,20 @@ function renderAll(root, S) {
     if (addCall) addCall.onclick = () => { S.lists.call_log.push({}); dirty = true; draw(); };
     root.querySelector("#saLg").onclick = () => { S.largeText = !S.largeText; draw(); };
     root.querySelector("#saHc").onclick = () => { S.highContrast = !S.highContrast; draw(); };
+    root.querySelector("#saSum").onclick = () => {
+      const f = id => String(S.f[id]||"").trim();
+      const rowsOf = id => (S.lists[id]||[]).filter(r => isRowFilled(id,r));
+      document.getElementById("sheetOnly").innerHTML = '<h1>Our Family Field Guide — 1-Page Summary</h1><p style="font-size:13px;color:#444">Updated '+new Date().toLocaleDateString()+'</p><div class="sgrid">'
+        + '<div class="sboxc"><h3>1. Call First &amp; Pros</h3>'+(f("q_first")?'<p><b>Call first:</b> '+esc(f("q_first"))+'</p>':"")+'<ul>'+rowsOf("first").map(r=>'<li><b>'+esc(r.name||r.rel||"Contact")+'</b>: '+esc(r.phone||"")+'</li>').join("")+rowsOf("pros").slice(0,5).map(r=>'<li><b>'+esc(r.role||"Pro")+':</b> '+esc(r.name||"")+' '+esc(r.phone||"")+'</li>').join("")+'</ul></div>'
+        + '<div class="sboxc"><h3>2. Money &amp; Debts</h3>'+(f("m_monthly")?'<p><b>Monthly:</b> '+esc(f("m_monthly"))+'</p>':"")+(f("q_runway")?'<p><b>Runway:</b> '+esc(f("q_runway"))+'</p>':"")+'<ul>'+rowsOf("accounts").map(r=>'<li><b>'+esc(r.inst||r.type)+'</b> ('+esc(r.own||"")+' *'+esc(r.last4||"")+')</li>').join("")+'</ul>'+(rowsOf("debts").length?'<p><b>Debts:</b> '+rowsOf("debts").map(r=>esc(r.type||r.name)+' '+esc(r.bal||"")).join(" · ")+'</p>':"")+'</div>'
+        + '<div class="sboxc full"><h3>3. Insurance &amp; Retirement</h3><ul>'+rowsOf("insurance").map(r=>'<li><b>'+esc(r.type)+':</b> '+[r.co,r.amt,r.benef?"Benef: "+r.benef:"",r.phone].filter(Boolean).map(esc).join(" · ")+'</li>').join("")+'</ul>'+(rowsOf("invest").length?'<p><b>Investments:</b> '+rowsOf("invest").map(r=>esc(r.inst||"")+' '+esc(r.type||"")+(r.benef?' ('+esc(r.benef)+')':"")).join(" · ")+'</p>':"")+'</div>'
+        + '<div class="sboxc"><h3>4. Papers, Phone &amp; Property</h3>'+(f("q_binder")?'<p><b>Papers:</b> '+esc(f("q_binder"))+'</p>':"")+(f("d_will")?'<p><b>Will:</b> '+esc(f("d_will"))+'</p>':"")+(f("d_phone")?'<p><b>Phone:</b> '+esc(f("d_phone"))+'</p>':"")+(rowsOf("property").length?'<p><b>Property:</b> '+rowsOf("property").map(r=>esc(r.what)+(r.where?" ("+esc(r.where)+")":"")).join(" · ")+'</p>':"")+'</div>'
+        + '<div class="sboxc"><h3>5. Home, Kids &amp; Pets</h3>'+(f("k_home")?'<p><b>Address:</b> '+esc(f("k_home"))+'</p>':"")+(f("k_safe")?'<p><b>Safe word:</b> '+esc(f("k_safe"))+'</p>':"")+'<ul>'+rowsOf("kids_info").map(r=>'<li><b>'+esc(r.child)+'</b> '+esc(r.pickup||"")+'</li>').join("")+rowsOf("pets").map(r=>'<li><b>'+esc(r.name)+'</b> '+esc(r.vet||"")+'</li>').join("")+'</ul></div></div>';
+      document.body.classList.add("sheet-mode");
+      const donePrint = () => document.body.classList.remove("sheet-mode");
+      window.addEventListener("afterprint", donePrint, { once:true });
+      setTimeout(() => { window.print(); setTimeout(donePrint, 1200); }, 40);
+    };
     root.querySelector("#saCare").onclick = () => {
       const f = id => String(S.f[id]||"").trim();
       const rowsOf = id => (S.lists[id]||[]).filter(r => isRowFilled(id,r));
@@ -1656,7 +1867,8 @@ function isRowEditedWithExtra(blockId, row, incExtra = {}) {
   if (!row) return false;
   const nonEmptyEntries = Object.entries(row).filter(([, val]) => String(val ?? "").trim() !== "");
   if (!nonEmptyEntries.length) return false;
-  const b = findBlockDef(blockId) || Object.values(incExtra || {}).flat().find(x => x.id === blockId);
+  const rawDef = findBlockDef(blockId) || Object.values(incExtra || {}).flat().find(x => x.id === blockId);
+  const b = rawDef ? rList(rawDef) : null;
   if (b?.seed?.length) {
     const matchesSeed = b.seed.some(seedRow => {
       const seedEntries = Object.entries(seedRow).filter(([, val]) => String(val ?? "").trim() !== "");
@@ -1664,6 +1876,11 @@ function isRowEditedWithExtra(blockId, row, incExtra = {}) {
       return seedEntries.every(([k, val]) => String(row[k] ?? "").trim() === String(val ?? "").trim());
     });
     if (matchesSeed) return false;
+  }
+  if (b?.suggestions?.length && nonEmptyEntries.length === 1) {
+    const scol = b.suggestCol || b.cols?.[0]?.[0];
+    const [k, v] = nonEmptyEntries[0];
+    if (k === scol && b.suggestions.some(s => s.toLowerCase() === String(v).trim().toLowerCase())) return false;
   }
   return true;
 }
