@@ -20,3 +20,10 @@ desktop/src-tauri/icons/
 native/apple/.build/
 native/apple/.swiftpm/
 native/apple/DerivedData/
+
+# Pure native Android build artifacts
+native/android/.gradle/
+native/android/build/
+native/android/app/build/
+native/android/local.properties
+native/android/.idea/

@@ -11,6 +11,7 @@ JSC = "/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/js
 OUT_MAIN = os.path.join(ROOT, "shared", "guide-data.json")
 TARGETS = [
     os.path.join(ROOT, "native", "apple", "Sources", "FamilyGuideCore", "Resources", "guide-data.json"),
+    os.path.join(ROOT, "native", "android", "app", "src", "main", "assets", "guide-data.json"),
 ]
 
 JS_DUMP = r'''
