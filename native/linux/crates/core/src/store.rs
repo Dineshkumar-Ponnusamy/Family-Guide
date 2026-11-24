@@ -443,6 +443,20 @@ impl GuideStore {
         self.save(true);
     }
 
+    pub fn delete_custom_section(&mut self, tab_id: &str) {
+        if let Some(items) = self.state.extra.remove(tab_id) {
+            for x in items {
+                self.state.f.remove(&x.id);
+                self.state.lists.remove(&x.id);
+            }
+        }
+        self.state.custom_tabs.retain(|t| t.id != tab_id);
+        if self.state.tab == tab_id {
+            self.state.tab = "start".to_string();
+        }
+        self.save(true);
+    }
+
     // MARK: - Readiness & Privacy Audit
 
     pub fn compute_audit(&self) -> Vec<AuditItem> {

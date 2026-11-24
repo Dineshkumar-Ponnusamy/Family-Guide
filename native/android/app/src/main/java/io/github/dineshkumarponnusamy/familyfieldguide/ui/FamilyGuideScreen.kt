@@ -1,5 +1,6 @@
 package io.github.dineshkumarponnusamy.familyfieldguide.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -17,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -42,13 +44,16 @@ fun FamilyGuideScreen(
     var activeSheet by remember { mutableStateOf<SheetType?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var regionMenuOpen by remember { mutableStateOf(false) }
+    val hc = store.state.highContrast
 
     if (isLocked) {
         Box(
-            modifier = Modifier.fillMaxSize().background(FfgColors.Paper).padding(24.dp),
+            modifier = Modifier.fillMaxSize().background(if (hc) FfgColors.HcPaper else FfgColors.Paper).padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
-            FfgCard {
+            FfgCard(highContrast = hc) {
+                FfgBrandLogo(size = 56.dp)
+                Spacer(Modifier.height(10.dp))
                 Text("Our Family Field Guide is Locked", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text("100% offline. Unlock with Fingerprint, Face, or Device PIN.", color = FfgColors.Ink2)
@@ -65,18 +70,21 @@ fun FamilyGuideScreen(
     val selectedIdx = allTabs.indexOfFirst { it.first == store.state.tab }.coerceAtLeast(0)
 
     Scaffold(
-        containerColor = FfgColors.Paper,
+        containerColor = if (hc) FfgColors.HcPaper else FfgColors.Paper,
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = FfgColors.Paper),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = if (hc) FfgColors.HcPaper else FfgColors.Paper),
                 title = {
-                    Column {
-                        Text("Family Field Guide", fontWeight = FontWeight.Bold, color = FfgColors.Ink)
-                        Text(
-                            "${store.completionPercent}% · ${store.currentRegion.label}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = FfgColors.Ink2
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        FfgBrandLogo(size = 32.dp)
+                        Column {
+                            Text("Our Family Field Guide", style = MaterialTheme.typography.titleMedium, color = FfgColors.Ink)
+                            Text(
+                                "${store.completionPercent}% · ${store.currentRegion.label}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = FfgColors.Ink2
+                            )
+                        }
                     }
                 },
                 actions = {
@@ -103,11 +111,28 @@ fun FamilyGuideScreen(
                             DropdownMenuItem(text = { Text("Add Section / Template") }, onClick = { menuOpen = false; activeSheet = SheetType.NewSection })
                             DropdownMenuItem(text = { Text("Change Country / Region") }, onClick = { menuOpen = false; regionMenuOpen = true })
                             HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text(if (store.state.largeText) "✓ A+ Large Text (On)" else "A+ Large Text") },
+                                onClick = {
+                                    menuOpen = false
+                                    store.state = store.state.copy(largeText = !store.state.largeText)
+                                    store.save(touch = false)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (store.state.highContrast) "✓ High Contrast (On)" else "High Contrast") },
+                                onClick = {
+                                    menuOpen = false
+                                    store.state = store.state.copy(highContrast = !store.state.highContrast)
+                                    store.save(touch = false)
+                                }
+                            )
+                            HorizontalDivider()
                             DropdownMenuItem(text = { Text("Save Locked Backup") }, onClick = { menuOpen = false; activeSheet = SheetType.Backup })
                             DropdownMenuItem(text = { Text("Open / Merge Backup") }, onClick = { menuOpen = false; activeSheet = SheetType.Restore })
                         }
                         DropdownMenu(expanded = regionMenuOpen, onDismissRequest = { regionMenuOpen = false }) {
-                            store.data.REGIONS.keys.sorted().forEach { k ->
+                            FfgColors.REGION_ORDER.filter { store.data.REGIONS.containsKey(it) }.forEach { k ->
                                 DropdownMenuItem(
                                     text = { Text(store.data.REGIONS[k]?.label ?: k) },
                                     onClick = {
@@ -126,7 +151,7 @@ fun FamilyGuideScreen(
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             ScrollableTabRow(
                 selectedTabIndex = selectedIdx,
-                containerColor = FfgColors.Paper,
+                containerColor = if (hc) FfgColors.HcPaper else FfgColors.Paper,
                 contentColor = FfgColors.Ink,
                 edgePadding = 12.dp
             ) {
@@ -147,6 +172,18 @@ fun FamilyGuideScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(vertical = 14.dp)
             ) {
+                if (store.state.readMode) {
+                    item {
+                        Surface(color = FfgColors.InfoBg, shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, FfgColors.Sky), modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Read Mode — showing only filled answers.", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = { store.state = store.state.copy(readMode = false); store.save(touch = false) }) {
+                                    Text("Back to Edit")
+                                }
+                            }
+                        }
+                    }
+                }
                 item { DemoBanner(store) }
 
                 val stdTab = store.data.TABS.firstOrNull { it.id == store.state.tab }
@@ -240,7 +277,7 @@ private fun DemoBanner(store: GuideStore) {
 private fun RenderBlock(store: GuideStore, b: BlockDef, onJump: (String, String) -> Unit) {
     when (b.type) {
         "glance" -> {
-            Surface(color = FfgColors.Ink, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+            Surface(color = FfgColors.Ink, shape = RoundedCornerShape(10.dp), border = BorderStroke(2.dp, FfgColors.Tomato), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("If you read nothing else", style = MaterialTheme.typography.titleMedium, color = FfgColors.Paper, fontWeight = FontWeight.Bold)
                     store.data.GLANCE.forEach { g ->
@@ -265,20 +302,24 @@ private fun RenderBlock(store: GuideStore, b: BlockDef, onJump: (String, String)
                 }
             }
         }
-        "playbook" -> FfgCard {
+        "playbook" -> FfgCard(highContrast = store.state.highContrast) {
             Text("What's happening?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                store.data.PLAYBOOK.forEach { (k, pb) ->
+                FfgColors.PLAYBOOK_ORDER.mapNotNull { k -> store.data.PLAYBOOK[k]?.let { k to it } }.forEach { (k, pb) ->
                     FilterChip(
                         selected = store.state.track == k,
                         onClick = { store.state = store.state.copy(track = k); store.save(touch = false) },
-                        label = { Text(pb.label) }
+                        label = { Text(pb.label) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = FfgColors.Tomato,
+                            selectedLabelColor = Color.White
+                        )
                     )
                 }
             }
             val active = store.data.PLAYBOOK[store.state.track]
             active?.phases?.forEach { ph ->
-                Text(ph.whenLabel, color = FfgColors.Tomato, fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic, modifier = Modifier.padding(top = 8.dp))
+                Text(ph.whenLabel, fontFamily = FontFamily.Serif, color = FfgColors.Tomato, fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic, modifier = Modifier.padding(top = 8.dp))
                 ph.steps.forEach { rawS ->
                     val s = store.localizedStep(rawS)
                     val checked = store.state.checks[s.id] == true

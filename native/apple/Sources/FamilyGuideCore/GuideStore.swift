@@ -244,6 +244,19 @@ public final class GuideStore {
         statusToast = "Added \"\(tpl.name)\""
     }
 
+    public func deleteCustomSection(_ tabId: String) {
+        for x in state.extra[tabId] ?? [] {
+            state.f.removeValue(forKey: x.id)
+            state.lists.removeValue(forKey: x.id)
+        }
+        state.extra.removeValue(forKey: tabId)
+        state.customTabs.removeAll { $0.id == tabId }
+        if state.tab == tabId {
+            state.tab = "start"
+        }
+        save()
+    }
+
     // MARK: - Readiness Audit (Including Crypto Seed & Gov ID Privacy Checks)
 
     public func computeAudit() -> [AuditItem] {

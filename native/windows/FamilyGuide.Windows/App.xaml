@@ -8,9 +8,20 @@
         <SolidColorBrush x:Key="CardBrush" Color="#FFFDF8" />
         <SolidColorBrush x:Key="InkBrush" Color="#1F3A2E" />
         <SolidColorBrush x:Key="Ink2Brush" Color="#4B5F55" />
+        <SolidColorBrush x:Key="MuteBrush" Color="#8A8F84" />
         <SolidColorBrush x:Key="RuleBrush" Color="#D9CFB9" />
         <SolidColorBrush x:Key="TomatoBrush" Color="#D2512F" />
+        <SolidColorBrush x:Key="SunBrush" Color="#E9B44C" />
         <SolidColorBrush x:Key="SkyBrush" Color="#4F7C8A" />
+        <SolidColorBrush x:Key="AlertBgBrush" Color="#FFF5F2" />
         <SolidColorBrush x:Key="WarnBgBrush" Color="#FBF3DF" />
+        <SolidColorBrush x:Key="InfoBgBrush" Color="#E7F0F2" />
+        <SolidColorBrush x:Key="DemoIdleBgBrush" Color="#EEF5EE" />
+        <SolidColorBrush x:Key="DemoActiveBgBrush" Color="#FFF3DD" />
+        <SolidColorBrush x:Key="OkGreenBrush" Color="#2E6F5E" />
+
+        <FontFamily x:Key="SerifFont">Palatino Linotype, Georgia, Times New Roman</FontFamily>
+        <FontFamily x:Key="SansFont">Segoe UI, Trebuchet MS</FontFamily>
+        <FontFamily x:Key="MonoFont">Consolas, Courier New</FontFamily>
     </Application.Resources>
 </Application>

@@ -1,0 +1,38 @@
+name: Build Apple Apps (Swift macOS & Core)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "native/apple/**"
+      - "shared/guide-data.json"
+      - ".github/workflows/apple.yml"
+  pull_request:
+    paths:
+      - "native/apple/**"
+      - "shared/guide-data.json"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (for schema sync)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python & sync shared schema JSON
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 shared/sync_schema.py
+
+      - name: Run Swift Core & UI tests
+        run: swift test --package-path native/apple
+
+      - name: Build macOS executable
+        run: swift build --package-path native/apple --product FamilyGuideMac -c release

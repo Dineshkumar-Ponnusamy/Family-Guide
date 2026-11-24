@@ -152,4 +152,61 @@ mod tests {
             Some("Spouse Contact")
         );
     }
+
+    #[test]
+    fn custom_section_template_and_delete() {
+        let mut store = GuideStore::new_in_memory().unwrap();
+        assert_eq!(store.data.SECTION_TEMPLATES.len(), 8);
+        let tpl = store.data.SECTION_TEMPLATES[0].clone();
+        store.apply_section_template(&tpl);
+        assert_eq!(store.state.custom_tabs.len(), 1);
+        let tid = store.state.custom_tabs[0].id.clone();
+        assert_eq!(store.state.tab, tid);
+        assert!(!store.state.extra.get(&tid).unwrap().is_empty());
+
+        store.delete_custom_section(&tid);
+        assert!(store.state.custom_tabs.is_empty());
+        assert_eq!(store.state.tab, "start");
+    }
+
+    #[test]
+    fn exports_and_region_localization() {
+        let mut store = GuideStore::new_in_memory().unwrap();
+        store.state.region = "in".to_string();
+        store.normalize();
+        store
+            .state
+            .f
+            .insert("h_triage".to_string(), "Apollo Oncology 24/7".to_string());
+        store
+            .state
+            .f
+            .insert("h_redflag".to_string(), "Fever >= 100.4F -> ER".to_string());
+        store
+            .state
+            .f
+            .insert("q_first".to_string(), "Meera (+91-98765-43210)".to_string());
+
+        let er = store.export_er_grab_sheet_text();
+        assert!(er.contains("Apollo Oncology 24/7"));
+        assert!(er.contains("Fever >= 100.4F"));
+        assert!(er.contains("112"));
+
+        let summary = store.export_executive_summary_text();
+        assert!(summary.contains("Meera (+91-98765-43210)"));
+        assert!(summary.contains("ER / Active Illness Alert"));
+    }
+
+    #[test]
+    fn accessibility_and_read_mode_roundtrip() {
+        let mut state = GuideState::default();
+        state.read_mode = true;
+        state.large_text = true;
+        state.high_contrast = true;
+        let json = serde_json::to_string(&state).unwrap();
+        let decoded: GuideState = serde_json::from_str(&json).unwrap();
+        assert!(decoded.read_mode);
+        assert!(decoded.large_text);
+        assert!(decoded.high_contrast);
+    }
 }

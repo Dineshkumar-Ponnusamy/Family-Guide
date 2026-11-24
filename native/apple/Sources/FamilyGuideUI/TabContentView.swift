@@ -7,13 +7,15 @@ public struct TabContentView: View {
     let jumpHandler: (String, String?, String?) -> Void
 
     public var body: some View {
+        let large = store.state.largeText
+        let hc = store.state.highContrast
         VStack(alignment: .leading, spacing: 16) {
             Text(tab.title)
-                .font(.largeTitle.bold())
-                .foregroundColor(Theme.ink)
+                .font(Theme.serifTitle(large: large))
+                .foregroundColor(Theme.inkFg(hc))
             Text(tab.lede)
-                .font(.subheadline)
-                .foregroundColor(Theme.ink2)
+                .font(Theme.sansBody(large: large))
+                .foregroundColor(Theme.ink2Fg(hc))
 
             ForEach(tab.blocks, id: \.stableId) { b in
                 blockView(b)
@@ -54,15 +56,16 @@ public struct TabContentView: View {
     }
 
     private var glanceCard: some View {
+        let large = store.state.largeText
         let items = store.data.GLANCE.map { store.localizedField(FieldDef(id: $0.id, label: $0.label, placeholder: $0.placeholder)) }
         return VStack(alignment: .leading, spacing: 10) {
             Text("If you read nothing else")
-                .font(.title3.bold())
+                .font(Theme.serifSection(large: large))
                 .foregroundColor(Theme.paper)
             ForEach(items) { f in
                 if !store.state.readMode || !(store.state.f[f.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(f.label.uppercased()).font(.caption2.bold()).foregroundColor(Theme.paper2)
+                        Text(f.label.uppercased()).font(Theme.monoLabel(large: large)).foregroundColor(Theme.paper2)
                         fieldControl(f, darkBg: true)
                     }
                 }
@@ -70,17 +73,20 @@ public struct TabContentView: View {
         }
         .padding(16)
         .background(Theme.ink)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.tomato, lineWidth: 2))
         .cornerRadius(10)
     }
 
     private var playbookCard: some View {
-        FFGCard {
+        let large = store.state.largeText
+        let hc = store.state.highContrast
+        return FFGCard(highContrast: hc) {
             Text("What's happening?")
-                .font(.title3.bold())
-                .foregroundColor(Theme.ink)
+                .font(Theme.serifSection(large: large))
+                .foregroundColor(Theme.inkFg(hc))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(store.data.PLAYBOOK.keys.sorted(), id: \.self) { k in
+                    ForEach(Theme.playbookOrder.filter { store.data.PLAYBOOK[$0] != nil }, id: \.self) { k in
                         if let pb = store.data.PLAYBOOK[k] {
                             Button(pb.label) {
                                 store.state.track = k
@@ -98,7 +104,7 @@ public struct TabContentView: View {
                 ForEach(active.phases) { ph in
                     VStack(alignment: .leading, spacing: 8) {
                         Text(ph.when)
-                            .font(.headline.italic())
+                            .font(Theme.serifItalic(large: large))
                             .foregroundColor(Theme.tomato)
                             .padding(.top, 6)
                         ForEach(ph.steps) { rawS in
@@ -111,21 +117,21 @@ public struct TabContentView: View {
                                 } label: {
                                     Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                                         .font(.title3)
-                                        .foregroundColor(checked ? Theme.ink : Theme.mute)
+                                        .foregroundColor(checked ? Theme.inkFg(hc) : Theme.mute)
                                 }
                                 .buttonStyle(.plain)
 
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(s.t)
-                                        .fontWeight(.semibold)
+                                        .font(Theme.sansBody(large: large).weight(.semibold))
                                         .strikethrough(checked)
-                                        .foregroundColor(checked ? Theme.mute : Theme.ink)
+                                        .foregroundColor(checked ? Theme.mute : Theme.inkFg(hc))
                                     Text(s.d)
-                                        .font(.callout)
-                                        .foregroundColor(Theme.ink2)
+                                        .font(Theme.sansBody(large: large))
+                                        .foregroundColor(Theme.ink2Fg(hc))
                                     if let ref = s.ref, !ref.isEmpty, let rt = s.refTab {
                                         Button("↳ \(ref)") { jumpHandler(rt, s.refBlock, nil) }
-                                            .font(.caption.monospaced())
+                                            .font(Theme.monoLabel(large: large))
                                             .foregroundColor(Theme.sky)
                                     }
                                 }
@@ -140,17 +146,19 @@ public struct TabContentView: View {
 
     @ViewBuilder
     private func fieldsCard(title: String, hint: String?, fields: [FieldDef]) -> some View {
+        let large = store.state.largeText
+        let hc = store.state.highContrast
         let locFields = fields.map { store.localizedField($0) }
         let visible = store.state.readMode
             ? locFields.filter { !(store.state.f[$0.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             : locFields
         if !visible.isEmpty {
-            FFGCard {
-                Text(title).font(.title3.bold()).foregroundColor(Theme.ink)
+            FFGCard(highContrast: hc) {
+                Text(title).font(Theme.serifSection(large: large)).foregroundColor(Theme.inkFg(hc))
                 if let hint { Text(hint).font(.caption).foregroundColor(Theme.mute) }
                 ForEach(visible) { rf in
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(rf.label.uppercased()).font(.caption2.bold()).foregroundColor(Theme.ink2)
+                        Text(rf.label.uppercased()).font(Theme.monoLabel(large: large)).foregroundColor(Theme.ink2Fg(hc))
                         fieldControl(rf, darkBg: false)
                     }
                 }
@@ -350,15 +358,17 @@ public struct TabContentView: View {
     }
 
     private var scriptsCard: some View {
-        FFGCard {
-            Text("What to say").font(.title3.bold()).foregroundColor(Theme.ink)
+        let large = store.state.largeText
+        let hc = store.state.highContrast
+        return FFGCard(highContrast: hc) {
+            Text("What to say").font(Theme.serifSection(large: large)).foregroundColor(Theme.inkFg(hc))
             ForEach(store.data.SCRIPTS) { sc in
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(sc.title.uppercased()).font(.caption2.bold()).foregroundColor(Theme.ink2)
-                    Text(sc.body).font(.callout.italic()).textSelection(.enabled)
+                    Text(sc.title.uppercased()).font(Theme.monoLabel(large: large)).foregroundColor(Theme.ink2Fg(hc))
+                    Text(sc.body).font(Theme.serifItalic(large: large)).foregroundColor(Theme.inkFg(hc)).textSelection(.enabled)
                 }
                 .padding(8)
-                .background(Theme.paper)
+                .background(Theme.paperBg(hc))
                 .cornerRadius(6)
             }
         }
@@ -368,19 +378,19 @@ public struct TabContentView: View {
     private var letterCard: some View {
         let val = store.state.f["letter"] ?? ""
         if !store.state.readMode || !val.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            FFGCard {
-                Text("A note to you").font(.title3.bold()).foregroundColor(Theme.ink)
+            FFGCard(highContrast: store.state.highContrast) {
+                Text("A note to you").font(Theme.serifSection(large: store.state.largeText)).foregroundColor(Theme.inkFg(store.state.highContrast))
                 fieldControl(FieldDef(id: "letter", label: "From me", placeholder: "I love you. You can do this...", wide: true))
             }
         }
     }
 
     private var kidsCard: some View {
-        FFGCard {
+        FFGCard(highContrast: store.state.highContrast) {
             ForEach(store.data.KIDS) { k in
                 let rf = store.localizedField(FieldDef(id: k.id, label: k.label, placeholder: k.placeholder, wide: true))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("\(k.emoji) \(rf.label)").font(.headline)
+                    Text("\(k.emoji) \(rf.label)").font(Theme.serifSection(large: store.state.largeText))
                     fieldControl(rf)
                 }
             }
@@ -395,18 +405,13 @@ public struct CustomTabContentView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text(customTab.title).font(.largeTitle.bold()).foregroundColor(Theme.ink)
+                Text(customTab.title)
+                    .font(Theme.serifTitle(large: store.state.largeText))
+                    .foregroundColor(Theme.inkFg(store.state.highContrast))
                 Spacer()
                 if !store.state.readMode {
                     Button(role: .destructive) {
-                        for x in store.state.extra[customTab.id] ?? [] {
-                            store.state.f.removeValue(forKey: x.id)
-                            store.state.lists.removeValue(forKey: x.id)
-                        }
-                        store.state.extra.removeValue(forKey: customTab.id)
-                        store.state.customTabs.removeAll { $0.id == customTab.id }
-                        store.state.tab = "start"
-                        store.save()
+                        store.deleteCustomSection(customTab.id)
                     } label: {
                         Text("Delete section")
                     }

@@ -50,7 +50,11 @@ class MainActivity : FragmentActivity() {
         store.onStateChanged = { revision++ }
 
         setContent {
-            FamilyGuideTheme {
+            @Suppress("UNUSED_VARIABLE") val _tick = revision
+            FamilyGuideTheme(
+                largeText = store.state.largeText,
+                highContrast = store.state.highContrast
+            ) {
                 FamilyGuideScreen(
                     store = store,
                     revision = revision,

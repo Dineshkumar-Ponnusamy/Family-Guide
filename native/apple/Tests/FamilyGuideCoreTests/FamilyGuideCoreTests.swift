@@ -92,4 +92,51 @@ final class FamilyGuideCoreTests: XCTestCase {
         store.applyMerge(incoming: inc, overwriteConflicts: false)
         XCTAssertEqual(store.state.f["d_charity"], "St. Jude")
     }
+
+    func testCustomSectionTemplateAndDelete() throws {
+        let store = try GuideStore(storageDirectory: makeTempDir())
+        XCTAssertEqual(store.data.SECTION_TEMPLATES.count, 8)
+        let tpl = store.data.SECTION_TEMPLATES[0]
+        store.applySectionTemplate(tpl)
+        XCTAssertEqual(store.state.customTabs.count, 1)
+        let tid = store.state.customTabs[0].id
+        XCTAssertEqual(store.state.tab, tid)
+        XCTAssertFalse((store.state.extra[tid] ?? []).isEmpty)
+
+        store.deleteCustomSection(tid)
+        XCTAssertTrue(store.state.customTabs.isEmpty)
+        XCTAssertEqual(store.state.tab, "start")
+    }
+
+    func testExportsAndRegionLocalization() throws {
+        let store = try GuideStore(storageDirectory: makeTempDir())
+        store.state.region = "in"
+        store.normalize()
+        store.state.f["h_triage"] = "Apollo Oncology 24/7"
+        store.state.f["h_redflag"] = "Fever >= 100.4F -> ER"
+        store.state.f["q_first"] = "Meera (+91-98765-43210)"
+
+        let er = store.exportErGrabSheetText()
+        XCTAssertTrue(er.contains("Apollo Oncology 24/7"))
+        XCTAssertTrue(er.contains("Fever >= 100.4F"))
+        XCTAssertTrue(er.contains("112"))
+
+        let summary = store.exportExecutiveSummaryText()
+        XCTAssertTrue(summary.contains("Meera (+91-98765-43210)"))
+        XCTAssertTrue(summary.contains("ER / Active Illness Alert"))
+    }
+
+    func testAccessibilityAndReadModeStateRoundTrip() throws {
+        let dir = try makeTempDir()
+        let store = try GuideStore(storageDirectory: dir)
+        store.state.readMode = true
+        store.state.largeText = true
+        store.state.highContrast = true
+        store.save(touch: false)
+
+        let reloaded = try GuideStore(storageDirectory: dir)
+        XCTAssertTrue(reloaded.state.readMode)
+        XCTAssertTrue(reloaded.state.largeText)
+        XCTAssertTrue(reloaded.state.highContrast)
+    }
 }

@@ -99,4 +99,57 @@ public class FamilyGuideCoreTests
         store.ApplyMerge(inc, overwriteConflicts: false);
         Assert.Equal("St. Jude", store.State.f["d_charity"]);
     }
+
+    [Fact]
+    public void CustomSectionTemplateAndDelete()
+    {
+        var store = CreateTempStore();
+        Assert.Equal(8, store.Data.SECTION_TEMPLATES.Count);
+        var tpl = store.Data.SECTION_TEMPLATES[0];
+        store.ApplySectionTemplate(tpl);
+        Assert.Single(store.State.customTabs);
+        string tid = store.State.customTabs[0].id;
+        Assert.Equal(tid, store.State.tab);
+        Assert.NotEmpty(store.State.extra[tid]);
+
+        store.DeleteCustomSection(tid);
+        Assert.Empty(store.State.customTabs);
+        Assert.Equal("start", store.State.tab);
+    }
+
+    [Fact]
+    public void ExportsAndRegionLocalization()
+    {
+        var store = CreateTempStore();
+        store.State.region = "in";
+        store.Normalize();
+        store.State.f["h_triage"] = "Apollo Oncology 24/7";
+        store.State.f["h_redflag"] = "Fever >= 100.4F -> ER";
+        store.State.f["q_first"] = "Meera (+91-98765-43210)";
+
+        string er = store.ExportErGrabSheetText();
+        Assert.Contains("Apollo Oncology 24/7", er);
+        Assert.Contains("Fever >= 100.4F", er);
+        Assert.Contains("112", er);
+
+        string summary = store.ExportExecutiveSummaryText();
+        Assert.Contains("Meera (+91-98765-43210)", summary);
+        Assert.Contains("ER / Active Illness Alert", summary);
+    }
+
+    [Fact]
+    public void AccessibilityAndReadModeStateRoundTrip()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "ffg-win-acc-" + Guid.NewGuid().ToString("N"));
+        var store = new GuideStore(dir);
+        store.State.readMode = true;
+        store.State.largeText = true;
+        store.State.highContrast = true;
+        store.Save(touch: false);
+
+        var reloaded = new GuideStore(dir);
+        Assert.True(reloaded.State.readMode);
+        Assert.True(reloaded.State.largeText);
+        Assert.True(reloaded.State.highContrast);
+    }
 }

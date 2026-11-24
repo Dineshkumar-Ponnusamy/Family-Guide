@@ -95,16 +95,24 @@ public struct RootView: View {
                 set: { if let v = $0 { store.state.tab = v; store.save(touch: false) } }
             )) {
                 Section {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Our Family Field Guide")
-                            .font(.headline)
-                            .foregroundColor(Theme.ink)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            BrandLogoView(size: 36)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("OPEN THIS FIRST")
+                                    .font(Theme.monoLabel())
+                                    .foregroundColor(Theme.tomato)
+                                Text("Our Family Field Guide")
+                                    .font(Theme.serifSection())
+                                    .foregroundColor(Theme.inkFg(store.state.highContrast))
+                            }
+                        }
                         ProgressView(value: Double(store.completionPercent), total: 100)
                             .tint(Theme.tomato)
                         HStack {
                             Text("\(store.completionPercent)% filled")
-                                .font(.caption.monospacedDigit())
-                                .foregroundColor(Theme.ink2)
+                                .font(Theme.monoLabel())
+                                .foregroundColor(Theme.ink2Fg(store.state.highContrast))
                             Spacer()
                             Button("Readiness") { activeSheet = .readiness }
                                 .font(.caption.bold())
@@ -137,6 +145,7 @@ public struct RootView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        readModeBanner
                         demoBanner
                         if let stdTab = store.data.TABS.first(where: { $0.id == store.state.tab }) {
                             TabContentView(store: store, tab: stdTab, jumpHandler: { t, b, tr in
@@ -149,7 +158,7 @@ public struct RootView: View {
                     .padding(20)
                     .frame(maxWidth: 960, alignment: .leading)
                 }
-                .background(Theme.paper)
+                .background(Theme.paperBg(store.state.highContrast))
                 .onChange(of: scrollTargetId) { _, target in
                     if let target {
                         withAnimation { proxy.scrollTo(target, anchor: .center) }
@@ -163,7 +172,7 @@ public struct RootView: View {
                         get: { store.state.region },
                         set: { store.state.region = $0; store.save(touch: false) }
                     )) {
-                        ForEach(store.data.REGIONS.keys.sorted(), id: \.self) { k in
+                        ForEach(Theme.regionOrder.filter { store.data.REGIONS[$0] != nil }, id: \.self) { k in
                             Text(store.data.REGIONS[k]?.label ?? k).tag(k)
                         }
                     }
@@ -174,6 +183,20 @@ public struct RootView: View {
                         set: { store.state.readMode = $0; store.save(touch: false) }
                     )) {
                         Text(store.state.readMode ? "Read Mode" : "Edit Mode")
+                    }
+
+                    Toggle(isOn: Binding(
+                        get: { store.state.largeText },
+                        set: { store.state.largeText = $0; store.save(touch: false) }
+                    )) {
+                        Text("A+")
+                    }
+
+                    Toggle(isOn: Binding(
+                        get: { store.state.highContrast },
+                        set: { store.state.highContrast = $0; store.save(touch: false) }
+                    )) {
+                        Text("Contrast")
                     }
 
                     Button { activeSheet = .search } label: { Label("Search", systemImage: "magnifyingglass") }
@@ -191,23 +214,46 @@ public struct RootView: View {
     }
 
     @ViewBuilder
+    private var readModeBanner: some View {
+        if store.state.readMode {
+            HStack {
+                Text("Read Mode — showing only filled-in answers so you can't overwrite details by accident.")
+                    .font(Theme.sansBody(large: store.state.largeText))
+                    .foregroundColor(Theme.inkFg(store.state.highContrast))
+                Spacer()
+                Button("Back to Edit Mode") {
+                    store.state.readMode = false
+                    store.save(touch: false)
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(12)
+            .background(Theme.infoBg)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(Theme.sky).frame(width: 4)
+            }
+            .cornerRadius(8)
+        }
+    }
+
+    @ViewBuilder
     private var demoBanner: some View {
         if store.state.isDemo {
             HStack {
                 Text("Sample family preview (\(store.currentRegion.label)) — explore freely.")
-                    .font(.subheadline)
+                    .font(Theme.sansBody(large: store.state.largeText))
                 Spacer()
                 Button("Clear sample & start my guide") { store.clearDemo() }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.ink)
             }
             .padding(12)
-            .background(Color(red: 1.0, green: 0.95, blue: 0.86))
+            .background(Theme.demoActiveBg)
             .cornerRadius(8)
         } else if !store.hasAnyContent && !store.state.readMode && !store.state.dismissDemo {
             HStack {
                 Text("New here? Preview how a filled guide looks (US + India H-1B or Standard).")
-                    .font(.subheadline)
+                    .font(Theme.sansBody(large: store.state.largeText))
                 Spacer()
                 Button("Load sample family") { store.loadDemo() }
                     .buttonStyle(.borderedProminent)
@@ -216,19 +262,17 @@ public struct RootView: View {
                     .buttonStyle(.bordered)
             }
             .padding(12)
-            .background(Color(red: 0.93, green: 0.96, blue: 0.93))
+            .background(Theme.demoIdleBg)
             .cornerRadius(8)
         }
     }
 
     private var lockOverlay: some View {
         VStack(spacing: 16) {
-            Image(systemName: "lock.shield.fill")
-                .font(.system(size: 48))
-                .foregroundColor(Theme.ink)
+            BrandLogoView(size: 64)
             Text("Our Family Field Guide is Locked")
-                .font(.title2.bold())
-                .foregroundColor(Theme.ink)
+                .font(Theme.serifSection(large: store.state.largeText))
+                .foregroundColor(Theme.inkFg(store.state.highContrast))
             Button("Unlock with Touch ID / Face ID / Passcode") {
                 Task {
                     if await store.authenticateWithBiometrics() {
@@ -240,7 +284,7 @@ public struct RootView: View {
             .tint(Theme.ink)
         }
         .padding(32)
-        .background(Theme.card)
+        .background(Theme.cardBg(store.state.highContrast))
         .cornerRadius(16)
         .shadow(radius: 12)
     }

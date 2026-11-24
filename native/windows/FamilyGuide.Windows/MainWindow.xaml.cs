@@ -15,22 +15,41 @@ public partial class MainWindow : Window
     private string? _sessionLockPassphrase;
     private bool _suppressNavEvents;
 
+    private static readonly string[] RegionOrder = { "us", "us_in", "in", "visa_intl", "uk", "ca", "au", "eu", "generic" };
+    private static readonly string[] PlaybookOrder = { "hurt", "illness", "gone", "windfall", "money", "caregiver", "visa" };
+
     private static Brush Br(string key) => (Brush)Application.Current.Resources[key];
+    private static FontFamily Serif => (FontFamily)Application.Current.Resources["SerifFont"];
+    private static FontFamily Mono => (FontFamily)Application.Current.Resources["MonoFont"];
+    private double Scale(double size) => _store.State.largeText ? size * 1.15 : size;
 
     public MainWindow()
     {
         InitializeComponent();
         BuildRegionList();
+        ApplyThemeAppearance();
         RebuildSidebar();
         RenderActiveTab();
+    }
+
+    private void ApplyThemeAppearance()
+    {
+        bool hc = _store.State.highContrast;
+        Background = hc ? Brushes.White : Br("PaperBrush");
+        SidebarBorder.Background = hc ? Brushes.White : Br("Paper2Brush");
+        TopBarBorder.Background = hc ? Brushes.White : Br("CardBrush");
+        MainScroll.SetValue(TextElement.FontSizeProperty, Scale(14));
     }
 
     private void BuildRegionList()
     {
         _suppressNavEvents = true;
         RegionCombo.Items.Clear();
-        foreach (var kv in _store.Data.REGIONS.OrderBy(k => k.Key))
-            RegionCombo.Items.Add(new ComboBoxItem { Tag = kv.Key, Content = kv.Value.label });
+        foreach (var key in RegionOrder)
+        {
+            if (_store.Data.REGIONS.TryGetValue(key, out var preset))
+                RegionCombo.Items.Add(new ComboBoxItem { Tag = key, Content = preset.label });
+        }
         foreach (ComboBoxItem item in RegionCombo.Items)
         {
             if ((string)item.Tag == _store.State.region)
@@ -40,6 +59,8 @@ public partial class MainWindow : Window
             }
         }
         ReadModeToggle.IsChecked = _store.State.readMode;
+        LargeTextToggle.IsChecked = _store.State.largeText;
+        ContrastToggle.IsChecked = _store.State.highContrast;
         _suppressNavEvents = false;
     }
 
@@ -73,6 +94,7 @@ public partial class MainWindow : Window
     private void RenderActiveTab()
     {
         ContentHost.Children.Clear();
+        AddReadModeBanner();
         AddDemoBanner();
 
         var stdTab = _store.Data.TABS.FirstOrDefault(t => t.id == _store.State.tab);
@@ -81,8 +103,8 @@ public partial class MainWindow : Window
             ContentHost.Children.Add(new TextBlock
             {
                 Text = stdTab.title,
-                FontFamily = new FontFamily("Georgia"),
-                FontSize = 26,
+                FontFamily = Serif,
+                FontSize = Scale(26),
                 FontWeight = FontWeights.Bold,
                 Foreground = Br("InkBrush"),
                 Margin = new Thickness(0, 0, 0, 4)
@@ -90,7 +112,7 @@ public partial class MainWindow : Window
             ContentHost.Children.Add(new TextBlock
             {
                 Text = stdTab.lede,
-                FontSize = 14,
+                FontSize = Scale(14),
                 Foreground = Br("Ink2Brush"),
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 14)
@@ -100,25 +122,61 @@ public partial class MainWindow : Window
         }
         else if (_store.State.customTabs.FirstOrDefault(c => c.id == _store.State.tab) is { } ct)
         {
-            ContentHost.Children.Add(new TextBlock
+            var hdrBar = new DockPanel { Margin = new Thickness(0, 0, 0, 14) };
+            if (!_store.State.readMode)
+            {
+                var delBtn = new Button
+                {
+                    Content = "Delete section",
+                    Padding = new Thickness(10, 4, 10, 4),
+                    Foreground = Br("TomatoBrush")
+                };
+                string delId = ct.id;
+                delBtn.Click += (_, _) => { _store.DeleteCustomSection(delId); RebuildSidebar(); RenderActiveTab(); };
+                DockPanel.SetDock(delBtn, Dock.Right);
+                hdrBar.Children.Add(delBtn);
+            }
+            hdrBar.Children.Add(new TextBlock
             {
                 Text = ct.title,
-                FontFamily = new FontFamily("Georgia"),
-                FontSize = 26,
+                FontFamily = Serif,
+                FontSize = Scale(26),
                 FontWeight = FontWeights.Bold,
-                Foreground = Br("InkBrush"),
-                Margin = new Thickness(0, 0, 0, 14)
+                Foreground = Br("InkBrush")
             });
+            ContentHost.Children.Add(hdrBar);
             RenderExtras(ct.id, "Details");
         }
         UpdateMeter();
+    }
+
+    private void AddReadModeBanner()
+    {
+        if (!_store.State.readMode) return;
+        var bar = new Border
+        {
+            Background = Br("InfoBgBrush"),
+            BorderBrush = Br("SkyBrush"),
+            BorderThickness = new Thickness(4, 0, 0, 0),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(12),
+            Margin = new Thickness(0, 0, 0, 12)
+        };
+        var sp = new DockPanel();
+        var btn = new Button { Content = "Back to Edit Mode", Padding = new Thickness(10, 4, 10, 4) };
+        btn.Click += (_, _) => { _store.State.readMode = false; ReadModeToggle.IsChecked = false; _store.Save(touch: false); RenderActiveTab(); };
+        DockPanel.SetDock(btn, Dock.Right);
+        sp.Children.Add(btn);
+        sp.Children.Add(new TextBlock { Text = "Read Mode — showing only filled-in answers so nothing gets edited by accident.", VerticalAlignment = VerticalAlignment.Center });
+        bar.Child = sp;
+        ContentHost.Children.Add(bar);
     }
 
     private void AddDemoBanner()
     {
         if (_store.State.isDemo)
         {
-            var bar = new Border { Background = Br("WarnBgBrush"), BorderBrush = Br("TomatoBrush"), BorderThickness = new Thickness(3, 0, 0, 0), Padding = new Thickness(12), Margin = new Thickness(0, 0, 0, 12) };
+            var bar = new Border { Background = Br("DemoActiveBgBrush"), BorderBrush = Br("TomatoBrush"), BorderThickness = new Thickness(4, 0, 0, 0), CornerRadius = new CornerRadius(4), Padding = new Thickness(12), Margin = new Thickness(0, 0, 0, 12) };
             var sp = new DockPanel();
             var btn = new Button { Content = "Clear sample & start my guide", Padding = new Thickness(10, 4, 10, 4) };
             btn.Click += (_, _) => { _store.ClearDemo(); RebuildSidebar(); RenderActiveTab(); };
@@ -130,7 +188,7 @@ public partial class MainWindow : Window
         }
         else if (!_store.HasAnyContent && !_store.State.readMode && !_store.State.dismissDemo)
         {
-            var bar = new Border { Background = new SolidColorBrush(Color.FromRgb(238, 245, 238)), Padding = new Thickness(12), Margin = new Thickness(0, 0, 0, 12) };
+            var bar = new Border { Background = Br("DemoIdleBgBrush"), BorderBrush = Br("OkGreenBrush"), BorderThickness = new Thickness(4, 0, 0, 0), CornerRadius = new CornerRadius(4), Padding = new Thickness(12), Margin = new Thickness(0, 0, 0, 12) };
             var sp = new DockPanel();
             var btn = new Button { Content = "Load sample family", Padding = new Thickness(10, 4, 10, 4) };
             btn.Click += (_, _) => { _store.LoadDemo(); RebuildSidebar(); RenderActiveTab(); };
@@ -144,9 +202,9 @@ public partial class MainWindow : Window
 
     private Border MakeCard(bool dark = false) => new()
     {
-        Background = dark ? Br("InkBrush") : Br("CardBrush"),
-        BorderBrush = Br("RuleBrush"),
-        BorderThickness = new Thickness(1),
+        Background = dark ? Br("InkBrush") : (_store.State.highContrast ? Brushes.White : Br("CardBrush")),
+        BorderBrush = dark ? Br("TomatoBrush") : (_store.State.highContrast ? Brushes.Black : Br("RuleBrush")),
+        BorderThickness = new Thickness(dark || _store.State.highContrast ? 2 : 1),
         CornerRadius = new CornerRadius(6),
         Padding = new Thickness(16),
         Margin = new Thickness(0, 0, 0, 14)
@@ -188,19 +246,20 @@ public partial class MainWindow : Window
                 var sp = new StackPanel();
                 sp.Children.Add(new TextBlock { Text = "What's happening?", FontFamily = new FontFamily("Georgia"), FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
                 var wp = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
-                foreach (var kv in _store.Data.PLAYBOOK)
+                foreach (var key in PlaybookOrder)
                 {
-                    bool on = kv.Key == _store.State.track;
+                    if (!_store.Data.PLAYBOOK.TryGetValue(key, out var trackVal)) continue;
+                    bool on = key == _store.State.track;
                     var btn = new Button
                     {
-                        Content = kv.Value.label,
+                        Content = trackVal.label,
                         Padding = new Thickness(10, 5, 10, 5),
                         Margin = new Thickness(0, 0, 6, 6),
                         Background = on ? Br("TomatoBrush") : Br("Paper2Brush"),
                         Foreground = on ? Brushes.White : Br("InkBrush")
                     };
-                    string key = kv.Key;
-                    btn.Click += (_, _) => { _store.State.track = key; _store.Save(touch: false); RenderActiveTab(); };
+                    string picked = key;
+                    btn.Click += (_, _) => { _store.State.track = picked; _store.Save(touch: false); RenderActiveTab(); };
                     wp.Children.Add(btn);
                 }
                 sp.Children.Add(wp);
@@ -452,14 +511,49 @@ public partial class MainWindow : Window
         {
             var card = MakeCard();
             var sp = new StackPanel();
-            sp.Children.Add(new TextBlock { Text = title, FontFamily = new FontFamily("Georgia"), FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush") });
+            sp.Children.Add(new TextBlock { Text = title, FontFamily = Serif, FontSize = Scale(18), FontWeight = FontWeights.Bold, Foreground = Br("InkBrush") });
             foreach (var x in fields)
             {
                 string val = _store.State.f.TryGetValue(x.id, out var fv) ? fv : "";
-                sp.Children.Add(new TextBlock { Text = (x.label ?? "").ToUpperInvariant(), FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Br("Ink2Brush"), Margin = new Thickness(0, 6, 0, 2) });
+                sp.Children.Add(new TextBlock { Text = (x.label ?? "").ToUpperInvariant(), FontFamily = Mono, FontSize = Scale(10), FontWeight = FontWeights.Bold, Foreground = Br("Ink2Brush"), Margin = new Thickness(0, 6, 0, 2) });
                 var tb = new TextBox { Text = val, IsReadOnly = _store.State.readMode, Padding = new Thickness(6, 4, 6, 4) };
                 if (!_store.State.readMode) tb.TextChanged += (_, _) => { _store.State.f[x.id] = tb.Text; _store.Save(); UpdateMeter(); };
                 sp.Children.Add(tb);
+            }
+            card.Child = sp;
+            ContentHost.Children.Add(card);
+        }
+        foreach (var x in items.Where(i => i.type == "list"))
+        {
+            var rows = _store.State.lists.TryGetValue(x.id, out var lr) ? lr : new List<Dictionary<string, string>> { new() };
+            var card = MakeCard();
+            var sp = new StackPanel();
+            sp.Children.Add(new TextBlock { Text = x.title ?? "Table", FontFamily = Serif, FontSize = Scale(18), FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 6) });
+            for (int r = 0; r < rows.Count; r++)
+            {
+                var rowBox = new Border { Background = Br("PaperBrush"), BorderBrush = Br("RuleBrush"), BorderThickness = new Thickness(1), Padding = new Thickness(10), Margin = new Thickness(0, 4, 0, 4) };
+                var rowSp = new StackPanel();
+                foreach (var col in x.cols ?? new())
+                {
+                    string cval = rows[r].TryGetValue(col.key, out var cv) ? cv : "";
+                    rowSp.Children.Add(new TextBlock { Text = col.label.ToUpperInvariant(), FontFamily = Mono, FontSize = Scale(10), FontWeight = FontWeights.Bold, Foreground = Br("Ink2Brush") });
+                    var tb = new TextBox { Text = cval, IsReadOnly = _store.State.readMode, Padding = new Thickness(6, 3, 6, 3), Margin = new Thickness(0, 1, 0, 5) };
+                    if (!_store.State.readMode)
+                    {
+                        int rIdx = r; string cKey = col.key; string lid = x.id;
+                        tb.TextChanged += (_, _) => { if (rIdx < rows.Count) { rows[rIdx][cKey] = tb.Text; _store.Save(); UpdateMeter(); } };
+                    }
+                    rowSp.Children.Add(tb);
+                }
+                rowBox.Child = rowSp;
+                sp.Children.Add(rowBox);
+            }
+            if (!_store.State.readMode)
+            {
+                string lid = x.id;
+                var addBtn = new Button { Content = "+ Add a row", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+                addBtn.Click += (_, _) => { _store.State.lists[lid].Add(new()); _store.Save(); RenderActiveTab(); };
+                sp.Children.Add(addBtn);
             }
             card.Child = sp;
             ContentHost.Children.Add(card);
@@ -488,6 +582,24 @@ public partial class MainWindow : Window
         if (_suppressNavEvents) return;
         _store.State.readMode = ReadModeToggle.IsChecked == true;
         _store.Save(touch: false);
+        RenderActiveTab();
+    }
+
+    private void OnLargeTextToggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressNavEvents) return;
+        _store.State.largeText = LargeTextToggle.IsChecked == true;
+        _store.Save(touch: false);
+        ApplyThemeAppearance();
+        RenderActiveTab();
+    }
+
+    private void OnContrastToggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressNavEvents) return;
+        _store.State.highContrast = ContrastToggle.IsChecked == true;
+        _store.Save(touch: false);
+        ApplyThemeAppearance();
         RenderActiveTab();
     }
 

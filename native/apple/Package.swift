@@ -32,6 +32,10 @@ let package = Package(
         .testTarget(
             name: "FamilyGuideCoreTests",
             dependencies: ["FamilyGuideCore"]
+        ),
+        .testTarget(
+            name: "FamilyGuideUITests",
+            dependencies: ["FamilyGuideCore", "FamilyGuideUI"]
         )
     ]
 )

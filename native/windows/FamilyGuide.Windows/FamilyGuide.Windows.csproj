@@ -6,7 +6,11 @@
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>FamilyFieldGuide</AssemblyName>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Resources\app.ico" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\FamilyGuide.Core\FamilyGuide.Core.csproj" />
   </ItemGroup>

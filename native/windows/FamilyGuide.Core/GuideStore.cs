@@ -267,6 +267,22 @@ public sealed class GuideStore
         StatusToast = $"Added \"{tpl.name}\"";
     }
 
+    public void DeleteCustomSection(string tabId)
+    {
+        if (State.extra.TryGetValue(tabId, out var items))
+        {
+            foreach (var x in items)
+            {
+                State.f.Remove(x.id);
+                State.lists.Remove(x.id);
+            }
+            State.extra.Remove(tabId);
+        }
+        State.customTabs.RemoveAll(c => c.id == tabId);
+        if (State.tab == tabId) State.tab = "start";
+        Save();
+    }
+
     public List<AuditItem> ComputeAudit()
     {
         string F(string id) => State.f.TryGetValue(id, out var v) ? v.Trim() : "";

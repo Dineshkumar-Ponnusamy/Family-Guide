@@ -18,13 +18,13 @@ use dialogs::{
     show_add_section_dialog, show_audit_dialog, show_open_merge_dialog, show_save_backup_dialog,
     show_search_dialog, show_text_sheet_dialog, RefreshFn, SharedStore,
 };
-use theme::{apply_accessibility_classes, copy_to_clipboard, install_css};
+use theme::{apply_accessibility_classes, brand_logo_widget, copy_to_clipboard, install_css};
 
 const APP_ID: &str = "io.github.dineshkumarponnusamy.familyfieldguide";
 
 fn region_order() -> Vec<&'static str> {
     vec![
-        "us", "us_in", "in", "intl_visa", "uk", "ca", "au", "eu", "intl",
+        "us", "us_in", "in", "visa_intl", "uk", "ca", "au", "eu", "generic",
     ]
 }
 
@@ -32,10 +32,10 @@ fn playbook_order() -> Vec<&'static str> {
     vec![
         "hurt",
         "illness",
-        "died",
+        "gone",
         "windfall",
         "money",
-        "kids",
+        "caregiver",
         "visa",
     ]
 }
@@ -101,10 +101,10 @@ fn build_ui(app: &Application) {
     // Main overlay for Lock Screen + Split workspace
     let overlay = Overlay::new();
     let paned = Paned::new(Orientation::Horizontal);
-    paned.set_position(290);
+    paned.set_position(295);
     paned.add_css_class("ffg-root");
 
-    // Sidebar
+    // Sidebar with Brand Logo + Eyebrow + Title + Meter
     let sidebar = GtkBox::new(Orientation::Vertical, 8);
     sidebar.add_css_class("ffg-sidebar");
     sidebar.set_margin_top(12);
@@ -112,14 +112,24 @@ fn build_ui(app: &Application) {
     sidebar.set_margin_start(12);
     sidebar.set_margin_end(12);
 
+    let brand_row = GtkBox::new(Orientation::Horizontal, 10);
+    brand_row.append(&brand_logo_widget(40));
+    let brand_txt = GtkBox::new(Orientation::Vertical, 2);
+    let eyebrow = Label::new(Some("OPEN THIS FIRST"));
+    eyebrow.set_halign(Align::Start);
+    eyebrow.add_css_class("ffg-eyebrow");
     let brand_lbl = Label::new(Some("Our Family Field Guide"));
     brand_lbl.set_halign(Align::Start);
-    brand_lbl.add_css_class("ffg-title");
-    sidebar.append(&brand_lbl);
+    brand_lbl.set_wrap(true);
+    brand_lbl.add_css_class("ffg-section-title");
+    brand_txt.append(&eyebrow);
+    brand_txt.append(&brand_lbl);
+    brand_row.append(&brand_txt);
+    sidebar.append(&brand_row);
 
     let progress_lbl = Label::new(None);
     progress_lbl.set_halign(Align::Start);
-    progress_lbl.add_css_class("ffg-muted");
+    progress_lbl.add_css_class("ffg-field-label");
     let progress_bar = ProgressBar::new();
     sidebar.append(&progress_lbl);
     sidebar.append(&progress_bar);
@@ -161,17 +171,20 @@ fn build_ui(app: &Application) {
     paned.set_end_child(Some(&content_scroll));
     overlay.set_child(Some(&paned));
 
-    // Lock screen overlay child
+    // Lock screen overlay child with Brand Logo
     let lock_box = GtkBox::new(Orientation::Vertical, 12);
     lock_box.set_valign(Align::Center);
     lock_box.set_halign(Align::Center);
     lock_box.add_css_class("ffg-card");
-    let lock_title = Label::new(Some("Guide Locked"));
+    let lock_logo = brand_logo_widget(64);
+    lock_logo.set_halign(Align::Center);
+    let lock_title = Label::new(Some("Our Family Field Guide is Locked"));
     lock_title.add_css_class("ffg-title");
-    let lock_sub = Label::new(Some("Keep private family notes hidden when stepping away."));
+    let lock_sub = Label::new(Some("100% offline. Keep private family notes hidden when stepping away."));
     lock_sub.add_css_class("ffg-muted");
     let unlock_btn = Button::with_label("Unlock Guide");
     unlock_btn.add_css_class("suggested-action");
+    lock_box.append(&lock_logo);
     lock_box.append(&lock_title);
     lock_box.append(&lock_sub);
     lock_box.append(&unlock_btn);
@@ -221,9 +234,9 @@ fn build_ui(app: &Application) {
                 let pct = st.completion_percent();
                 progress_bar.set_fraction((pct as f64 / 100.0).clamp(0.0, 1.0));
                 progress_lbl.set_text(&format!(
-                    "{}% filled · {}",
+                    "{}% FILLED · {}",
                     pct,
-                    st.current_region().label
+                    st.current_region().label.to_uppercase()
                 ));
             }
             is_syncing.set(false);
@@ -287,21 +300,51 @@ fn build_ui(app: &Application) {
                 content_box.remove(&c);
             }
 
+            // Read Mode calm banner (matches Web / Apple / Android / Windows)
+            if read_mode {
+                let read_banner = GtkBox::new(Orientation::Horizontal, 8);
+                read_banner.add_css_class("ffg-banner-read");
+                let r_lbl = Label::new(Some(
+                    "Read Mode — showing only filled-in answers so you can't overwrite details by accident.",
+                ));
+                r_lbl.set_hexpand(true);
+                r_lbl.set_wrap(true);
+                r_lbl.set_halign(Align::Start);
+                let back_btn = Button::with_label("Back to Edit Mode");
+                let store_rb = store.clone();
+                let trig_rb = trigger_refresh.clone();
+                back_btn.connect_clicked(move |_| {
+                    {
+                        let mut st = store_rb.borrow_mut();
+                        st.state.read_mode = false;
+                        st.save(false);
+                    }
+                    trig_rb();
+                });
+                read_banner.append(&r_lbl);
+                read_banner.append(&back_btn);
+                content_box.append(&read_banner);
+            }
+
             // Demo banner
             let demo_banner = GtkBox::new(Orientation::Horizontal, 8);
-            demo_banner.add_css_class("ffg-banner-demo");
-            let demo_lbl = Label::new(Some(if is_demo {
-                "Viewing realistic sample family data. Clear when ready for your own details."
+            demo_banner.add_css_class(if is_demo {
+                "ffg-banner-demo-active"
             } else {
-                "Explore a realistic sample family (or jump right in below)."
+                "ffg-banner-demo"
+            });
+            let demo_lbl = Label::new(Some(if is_demo {
+                "Sample family preview — explore freely, or clear to start your own guide."
+            } else {
+                "New here? Preview how a filled guide looks (US + India H-1B or Standard)."
             }));
             demo_lbl.set_hexpand(true);
             demo_lbl.set_wrap(true);
             demo_lbl.set_halign(Align::Start);
             let demo_btn = Button::with_label(if is_demo {
-                "Clear Sample Data"
+                "Clear sample & start my guide"
             } else {
-                "Load Sample Family"
+                "Load sample family"
             });
             let store_dm = store.clone();
             let trig_dm = trigger_refresh.clone();
@@ -336,13 +379,26 @@ fn build_ui(app: &Application) {
                     render_block(&content_box, b, &store, read_mode, &trigger_refresh);
                 }
 
-                // Append any custom extra items attached to this core tab
                 render_extras_for_tab(&content_box, &tab.id, &store, read_mode, &trigger_refresh);
             } else if let Some(ct) = custom_tabs.iter().find(|c| c.id == active_tab) {
+                let top_row = GtkBox::new(Orientation::Horizontal, 8);
                 let hdr = Label::new(Some(&ct.title));
                 hdr.set_halign(Align::Start);
+                hdr.set_hexpand(true);
                 hdr.add_css_class("ffg-title");
-                content_box.append(&hdr);
+                top_row.append(&hdr);
+                if !read_mode {
+                    let del_btn = Button::with_label("Delete Section");
+                    let tid_del = ct.id.clone();
+                    let store_del = store.clone();
+                    let trig_del = trigger_refresh.clone();
+                    del_btn.connect_clicked(move |_| {
+                        store_del.borrow_mut().delete_custom_section(&tid_del);
+                        trig_del();
+                    });
+                    top_row.append(&del_btn);
+                }
+                content_box.append(&top_row);
                 render_extras_for_tab(&content_box, &ct.id, &store, read_mode, &trigger_refresh);
             }
         })
@@ -532,7 +588,11 @@ fn render_block(
     trigger_refresh: &RefreshFn,
 ) {
     let card = GtkBox::new(Orientation::Vertical, 10);
-    card.add_css_class("ffg-card");
+    card.add_css_class(if b.block_type == "glance" {
+        "ffg-glance-card"
+    } else {
+        "ffg-card"
+    });
 
     if let Some(ref title) = b.title {
         let t = Label::new(Some(title));
@@ -543,6 +603,12 @@ fn render_block(
 
     match b.block_type.as_str() {
         "glance" => {
+            if b.title.is_none() {
+                let t = Label::new(Some("If you read nothing else"));
+                t.set_halign(Align::Start);
+                t.add_css_class("ffg-section-title");
+                card.append(&t);
+            }
             let glance_items = store.borrow().data.GLANCE.clone();
             let grid = Grid::builder().column_spacing(12).row_spacing(10).build();
             let mut idx = 0i32;
@@ -570,7 +636,7 @@ fn render_block(
             }
             if idx == 0 && read_mode {
                 let empty = Label::new(Some("No quick-glance answers filled yet."));
-                empty.add_css_class("ffg-muted");
+                empty.add_css_class("ffg-field-label");
                 empty.set_halign(Align::Start);
                 card.append(&empty);
             } else {
@@ -698,12 +764,13 @@ fn render_block(
                 inner.set_margin_bottom(8);
                 inner.set_margin_start(8);
                 inner.set_margin_end(8);
-                let t = Label::new(Some(&sc.title));
+                let t = Label::new(Some(&sc.title.to_uppercase()));
                 t.set_halign(Align::Start);
-                t.add_css_class("ffg-section-title");
+                t.add_css_class("ffg-field-label");
                 let b_lbl = Label::new(Some(&sc.body));
                 b_lbl.set_halign(Align::Start);
                 b_lbl.set_wrap(true);
+                b_lbl.add_css_class("ffg-script-body");
                 let cp = Button::with_label("Copy Script");
                 cp.set_halign(Align::Start);
                 let body_c = sc.body.clone();
@@ -768,7 +835,7 @@ fn render_playbook(card: &GtkBox, store: &SharedStore, trigger_refresh: &Refresh
         if let Some(pb) = pb_map.get(key) {
             let btn = Button::with_label(&pb.label);
             if key == current_track {
-                btn.add_css_class("ffg-nav-active");
+                btn.add_css_class("ffg-track-active");
             }
             let k = key.to_string();
             let store_c = store.clone();
@@ -794,7 +861,7 @@ fn render_playbook(card: &GtkBox, store: &SharedStore, trigger_refresh: &Refresh
         for phase in &pb.phases {
             let ph_lbl = Label::new(Some(&phase.when));
             ph_lbl.set_halign(Align::Start);
-            ph_lbl.add_css_class("ffg-section-title");
+            ph_lbl.add_css_class("ffg-phase-title");
             ph_lbl.set_margin_top(6);
             card.append(&ph_lbl);
 
@@ -890,10 +957,10 @@ fn make_field_widget(
 ) -> GtkBox {
     let vbox = GtkBox::new(Orientation::Vertical, 4);
     vbox.set_hexpand(true);
-    let lbl = Label::new(Some(&rf.label));
+    let lbl = Label::new(Some(&rf.label.to_uppercase()));
     lbl.set_halign(Align::Start);
     lbl.set_wrap(true);
-    lbl.add_css_class("ffg-muted");
+    lbl.add_css_class("ffg-field-label");
     vbox.append(&lbl);
 
     if read_mode {
@@ -1011,8 +1078,8 @@ fn render_list_block(
             if read_mode {
                 let col_box = GtkBox::new(Orientation::Vertical, 1);
                 col_box.set_hexpand(true);
-                let cl = Label::new(Some(&col.label));
-                cl.add_css_class("ffg-muted");
+                let cl = Label::new(Some(&col.label.to_uppercase()));
+                cl.add_css_class("ffg-field-label");
                 cl.set_halign(Align::Start);
                 let vl = Label::new(Some(if val.is_empty() { "—" } else { val }));
                 vl.set_halign(Align::Start);

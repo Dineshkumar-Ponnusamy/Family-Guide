@@ -102,4 +102,59 @@ class FamilyGuideCoreTest {
         store.applyMerge(inc, overwriteConflicts = false)
         assertEquals("St. Jude", store.state.f["d_charity"])
     }
+
+    @Test
+    fun customSectionTemplateAndDelete() {
+        val store = loadStore()
+        assertEquals(8, store.data.SECTION_TEMPLATES.size)
+        val tpl = store.data.SECTION_TEMPLATES[0]
+        store.applySectionTemplate(tpl)
+        assertEquals(1, store.state.customTabs.size)
+        val tid = store.state.customTabs[0].id
+        assertEquals(tid, store.state.tab)
+        assertTrue((store.state.extra[tid] ?: emptyList()).isNotEmpty())
+
+        store.deleteCustomSection(tid)
+        assertTrue(store.state.customTabs.isEmpty())
+        assertEquals("start", store.state.tab)
+    }
+
+    @Test
+    fun exportsAndRegionLocalization() {
+        val store = loadStore()
+        store.state = store.state.copy(region = "in")
+        store.normalize()
+        store.updateField("h_triage", "Apollo Oncology 24/7")
+        store.updateField("h_redflag", "Fever >= 100.4F -> ER")
+        store.updateField("q_first", "Meera (+91-98765-43210)")
+
+        val er = store.exportErGrabSheetText()
+        assertTrue(er.contains("Apollo Oncology 24/7"))
+        assertTrue(er.contains("Fever >= 100.4F"))
+        assertTrue(er.contains("112"))
+
+        val summary = store.exportExecutiveSummaryText()
+        assertTrue(summary.contains("Meera (+91-98765-43210)"))
+        assertTrue(summary.contains("ER / Active Illness Alert"))
+    }
+
+    @Test
+    fun accessibilityAndReadModeRoundTrip() {
+        val tmp = Files.createTempDirectory("ffg-android-acc").toFile()
+        val stateFile = File(tmp, "state.json")
+        val candidates = listOf(
+            File("src/main/assets/guide-data.json"),
+            File("app/src/main/assets/guide-data.json"),
+            File("native/android/app/src/main/assets/guide-data.json")
+        )
+        val guideJson = candidates.first { it.exists() }.readText()
+        val store = GuideStore(guideJson, stateFile)
+        store.state = store.state.copy(readMode = true, largeText = true, highContrast = true)
+        store.save(touch = false)
+
+        val reloaded = GuideStore(guideJson, stateFile)
+        assertTrue(reloaded.state.readMode)
+        assertTrue(reloaded.state.largeText)
+        assertTrue(reloaded.state.highContrast)
+    }
 }

@@ -25,13 +25,17 @@ jobs:
           python3 -m json.tool desktop/src-tauri/tauri.conf.json > /dev/null
           python3 -m json.tool desktop/src-tauri/capabilities/default.json > /dev/null
 
-      - name: Syntax-check JavaScript files
+      - name: Syntax-check JavaScript & run Web test suite
         run: |
           node --check schema.js
           node --check regions.js
           node --check app.js
           node --check sw.js
           node --check desktop/sync-web.mjs
+          node tests/web_tests.js
+
+      - name: Run Cross-Platform Design, Logo & Schema Parity checks
+        run: python3 tests/test_design_parity.py
 
       - name: Verify desktop runtime asset sync
         run: |
