@@ -1,119 +1,138 @@
+<div align="center">
+
+<img src="icon.svg" alt="Our Family Field Guide Logo" width="96" height="96" />
+
 # Our Family Field Guide
 
 **A private, 100% offline emergency, medical care & digital legacy guide for the people you love.**
 
-If something happens and you can't be there—an accident, a sudden 2 AM ER visit, chronic/critical illness treatment, job loss, or passing away—your spouse or caregiver opens **one page** and finds what to do first, who to call, where the money, IDs, insurance, and papers are, how to handle a large payout safely, and a page written for the kids.
+[![CI](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/actions/workflows/ci.yml/badge.svg)](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/actions/workflows/ci.yml)
+[![Apple Build](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/actions/workflows/apple.yml/badge.svg)](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/actions/workflows/apple.yml)
+[![Android Build](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/actions/workflows/android.yml/badge.svg)](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/actions/workflows/android.yml)
+[![Windows Build](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/actions/workflows/windows.yml/badge.svg)](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/actions/workflows/windows.yml)
+[![Linux Build](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/actions/workflows/linux.yml/badge.svg)](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/actions/workflows/linux.yml)
+[![Release](https://img.shields.io/github/v/release/Dineshkumar-Ponnusamy/Family-Guide?color=D2512F&label=Release)](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-1F3A2E.svg)](LICENSE)
+[![Offline First](https://img.shields.io/badge/Offline-100%25%20Zero%20Network-2E6F5E.svg)](SECURITY.md)
 
-> **100% Offline** · **Zero Dependencies / Zero Build** · **Zero Tracking** · **AES-256-GCM Locked Exports** · **9 Country & Cross-Border Presets** · **MIT Licensed**
+[Live Web App](https://dineshkumar-ponnusamy.github.io/Family-Guide/) · [Download Latest Release](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/releases/latest) · [Security & Crypto](SECURITY.md) · [Backup Interop Spec](shared/BACKUP_FORMAT.md) · [Contributing](CONTRIBUTING.md)
+
+</div>
 
 ---
 
-## Try It Live (Zero Data Leaves Your Browser)
+If something happens and you can't be there—an accident, a sudden 2 AM ER visit, chronic/critical illness treatment, job loss, or passing away—your spouse or caregiver opens **one guide** and finds what to do first, who to call, where accounts, IDs, insurance, and papers live, how to handle a large payout safely, and a page written for the kids.
 
-- **Live Preview (GitHub Pages):** https://dineshkumar-ponnusamy.github.io/Family-Guide/ *(Click **"Load sample family"** in the banner to explore realistic US + India H-1B and standard examples instantly.)*
-- **Run Completely Offline:** Download this repository and double-click `index.html` in any browser—no server, npm install, or internet connection needed.
+- **Web PWA + 5 Pure Native Apps** (macOS, iOS, Android, Windows, Linux) sharing one single-source-of-truth schema and one byte-for-byte **AES-256-GCM** encrypted backup format.
+- **Zero servers · Zero accounts · Zero tracking · Zero third-party CDNs.**
+
+---
+
+## Screenshots
+
+<div align="center">
+  <img src="docs/screenshots/01-start-here-playbook.png" alt="Our Family Field Guide — Start Here & Playbook (Sample Family Demo)" width="100%" />
+  <br />
+  <sub><em>Warm paper editorial UI, completion & readiness meter, dark Quick Glance card, and 7 Emergency Playbooks (shown with built-in Sample Family demo data).</em></sub>
+</div>
+
+<br />
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/02-executive-summary.png" alt="Read Mode & 1-Page Family Executive Summary" width="100%" />
+      <p align="center"><b>Calm Read Mode &amp; 1-Page Executive Summary</b><br /><sub>Tappable contacts, accounts, policies, IDs, and active ER alerts on one printable screen.</sub></p>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/03-money-guide.png" alt="Beginner's Guide to Handling Big Money & Insurance Payouts" width="100%" />
+      <p align="center"><b>Beginner's Guide to Big Money &amp; Payouts</b><br /><sub>Localized 6-part survivor guide covering deposit caps, fee-only fiduciaries, and the 4-Bucket Plan.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/04-health-er-care.png" alt="Chronic & Critical Illness Care and 1-Page ER Grab Sheet" width="100%" />
+      <p align="center"><b>Chronic Illness &amp; 1-Page ER Grab Sheet</b><br /><sub>Red-flag rules, 24/7 specialist triage, ports/arm restrictions, rescue meds &amp; portal proxy.</sub></p>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/screenshots/05-mobile-view.png" alt="Mobile Responsive Read Mode" width="240" />
+      <p align="center"><b>Mobile Calm Read Mode</b><br /><sub>Responsive phone layout alongside pure native iOS &amp; Android apps.</sub></p>
+    </td>
+  </tr>
+</table>
+
+---
+
+## Download & Install (All 6 Platforms)
+
+All native builds and offline web packages are built and published from source by GitHub Actions on every release tag (`SHA256SUMS.txt` included on every release).
+
+| Platform | Tech Stack | Release Package | Install / Notes |
+|---|---|---|---|
+| **Web / PWA** | Vanilla HTML, CSS, JS *(zero deps)* | [Live Web App](https://dineshkumar-ponnusamy.github.io/Family-Guide/) or `Our-Family-Field-Guide-Web-Offline.zip` | Works offline from `index.html` or install via browser **Install App** / Safari **Add to Home Screen** |
+| **macOS (14+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-macOS-arm64.dmg` | Drag **Our Family Field Guide.app** to Applications; supports Touch ID lock |
+| **iOS (17+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-iOS-Xcode-Source.zip` | Local Swift Package + Face ID `@main` entry (`native/apple/`) for Xcode |
+| **Android (8.0+)** | Pure Kotlin + Jetpack Compose (M3) | `Our-Family-Field-Guide-Android.apk` | **Zero `INTERNET` permission** in `AndroidManifest.xml`; supports BiometricPrompt lock |
+| **Windows (x64)** | Pure C# + .NET 8 + WPF | `Our-Family-Field-Guide-Windows-x64.exe` | Single-file portable `.exe` with native Windows `PrintDialog` |
+| **Linux (GTK4)** | Pure Rust + `gtk4-rs` *(zero WebView)* | `Our-Family-Field-Guide-Linux-x86_64.tar.gz` | Extract & run `./install.sh` (installs binary, SVG icon & `.desktop` entry) |
+
+> **Latest Downloads:** [Releases Page](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/releases/latest)
 
 ---
 
 ## 30-Second Privacy & Security Audit
 
-Families put sensitive maps in here (where papers live, last 4 digits of accounts, life insurance, kids' pickup lists), so trust matters:
-
-1. **Zero network traffic & zero external scripts:** Plain HTML, CSS, and vanilla JavaScript (`index.html`, `styles.css`, `schema.js`, `regions.js`, `app.js`). Open DevTools → Network tab and see zero outbound requests, zero analytics, and zero CDNs.
-2. **Stays strictly in your browser (`localStorage`):** Nothing you type is ever uploaded anywhere. Optional **In-Browser Lock** encrypts local browser storage too and auto-locks after 15 minutes idle.
-3. **Client-side AES-256-GCM backups:** **Save backup** encrypts your data locally using the Web Crypto API (`PBKDF2-SHA-256`, 250,000 iterations, random 16-byte salt & 12-byte IV) into either a `.json` file or a **standalone self-contained `.html` file** that will still open offline in any browser 15 years from now.
-4. **Never store raw secrets:** Built-in Readiness Audits actively warn you if a 12+ word crypto seed phrase or a full SSN / 12-digit Aadhaar appears anywhere in your tables. See [SECURITY.md](SECURITY.md) for the full cryptographic & threat model.
-5. **Repo stays empty of personal data:** [`.gitignore`](.gitignore) blocks backup files, exported sections, and `.ics` reminders by default. *(Tip: use a **private** fork/repo anyway if your custom section titles could reveal personal details.)*
+1. **Zero network traffic & zero external dependencies:** Root Web PWA has zero CDNs/analytics; pure native apps have zero telemetry; Android declares **zero `<uses-permission>`** tags.
+2. **Client-side / device-local storage only:** Web stores locally in `localStorage` (with optional AES-GCM lock + 15-min idle timeout); macOS/iOS store in Application Support (with Touch ID / Face ID); Android in internal `filesDir` (with BiometricPrompt); Windows in `%AppData%`; Linux in `$XDG_DATA_HOME/family-field-guide/state.json` (`0600`).
+3. **Byte-for-byte cross-platform AES-256-GCM backups:** Every app reads and writes the exact same `familyFieldGuide.v1` JSON & standalone self-contained `.html` backups (`PBKDF2-HMAC-SHA256`, 250,000 iterations, 16-byte random salt, 12-byte random IV). See [shared/BACKUP_FORMAT.md](shared/BACKUP_FORMAT.md).
+4. **2-of-3 Shamir Split Recovery Cards + Diceware:** Split your passphrase over `GF(256)` into 3 recovery cards (`FFG-1-...` · Spouse · Safe · Trusted Person) where any 2 unlock any device.
+5. **Readiness & privacy audits:** Automatically warns if a 12+ word crypto seed phrase or full national ID (SSN / Aadhaar) is accidentally entered instead of physical location + last 4 digits. See [SECURITY.md](SECURITY.md).
 
 ---
 
 ## What's Included
 
-### 1. Emergency Playbooks, Calm Read Mode & 1-Page Executive Summary
-- **7 Actionable Playbooks** with clickable deep-links (`↳ Money → Insurance`) and an interactive **Call & claim log**:
-  1. Hospital / incapacitation
-  2. Chronic or critical illness treatment
-  3. Passing away
-  4. Handling big money (e.g. $1M life insurance payout)
-  5. Money emergency (job loss / big bill)
-  6. Both parents unreachable (Caregiver guide)
-  7. Work-visa & cross-border emergency (H-1B / NRI / Expat)
-- **Read mode vs. Edit mode:** Switch to **Read mode** so a stressed spouse sees only filled answers with tappable `tel:` / `mailto:` / `https:` links and can't overwrite details by accident. Includes **A+** large text, **Contrast** mode, collapsible cards, Quick-Add chips, and `/` instant search (`↑` / `↓` / `Enter`).
-- **1-Page Family Executive Summary:** One-screen (or 1-page printed) overview of contacts, accounts, payout instructions, crypto map, all insurance policies (with Beneficiaries), key IDs, titles, kids, pets, shut-offs, and active ER alerts.
-
-### 2. Chronic & Critical Illness Care + 1-Page ER Grab Sheet
-- Dedicated **Health → Chronic / critical illness & ER care** fields for active diagnosis/protocol, 24/7 specialist triage line & preferred ER, red-flag fever/symptom rules (*"call oncology before taking fever-reducers"*), implants/ports/lines & arm restrictions, rescue *"just-in-case"* meds, portal proxy/HIPAA access, and food/visitor boundaries.
-- Prints as a wallet/fridge-ready **1-Page ER & Medical Grab Sheet** (available in `Print` and standalone `.html` backups), plus a 1-click **Chronic & Critical Illness Care Plan** section template under **+ Section** (Go-Bag, Communication Captain, Kids' Teachers, Social Worker/Copay Aid, Care Squad, Symptom/Question Log, EOB vs. Bill tracker) and *"Open When"* keepsakes + caregiver respite permission.
-
-### 3. Beginner's Guide to Big Money & Insurance Payouts
-- Designed for a surviving spouse who has never managed large savings or household finances before:
-  - **My instructions for big money / insurance payouts** card under **Money**.
-  - **6-Part Plain-English Guide** (readable on screen, searchable, and printable): (1) the 6–12 month decision freeze, (2) day-1 safe cash parking under deposit-insurance caps + automatic *"Monthly Paycheck"* transfers, (3) a concrete **4-Bucket Plan & 3.5%–4% Rule** localized for `$1,000,000` / `₹2 Crore` / `£500,000` / `€500,000`, (4) how to hire a **Fee-Only Fiduciary** and spot annuity/whole-life/ULIP sales traps, (5) bereavement scam & loan-request defense scripts, and (6) a 15-minute monthly money routine.
-
-### 4. Global, India & Cross-Border (H-1B / NRI / Expat) Support
-- Switch instantly between **United States**, **US + India (H-1B / Visa / NRI)**, **India**, **Cross-Border / Work Visa (Any 2 Countries)**, **United Kingdom**, **Canada**, **Australia**, **European Union**, and **International / Generic**.
-- Adapts emergency numbers (`911`, `112`, `999`, `000`), retirement/tax terms (`401k`/`IRA`, `EPF`/`PPF`/`NPS`, `ISA`/`SIPP`, `RRSP`/`TFSA`, `Super`), nominee vs. legal heir warnings, non-citizen estate tax thresholds, grace periods, and a 1-click **Visa, Immigration & Cross-Border** section template.
-
-### 5. Crypto, Key IDs & How to Find Vetted / Free Help
-- **Crypto & digital assets** table (map hardware wallets/exchanges, physical seed locations, and a trusted tech helper—never raw seeds) + **Key IDs (SSN / PAN / Aadhaar / Passport)** table (last 4 digits + storage location only).
-- **Finding Vetted & Free Help** guide directly under **Contacts → Professionals**: how families starting from scratch can find Bar-referred lawyers, independent immigration attorneys (AILA / IAA / CICC / OMARA), hourly/flat-fee fiduciaries, free tax clinics (IRS VITA / CVITP / ATO / TaxAid), Employer **EAP** perks, **Hospital Social Workers**, and **Dollar For** hospital charity-care advocates.
-
-### 6. Resilient Backups, Two-Spouse Smart Merge & Family Fire Drill
-- **Two-Spouse Smart Merge:** Opening a backup lets you merge answers from both spouses with conflict detection rather than blindly overwriting.
-- **2-of-3 Shamir Split Recovery Cards + Diceware:** Generate typo-proof 5-word passphrases and printable 2-of-3 recovery cards (Spouse · Safe · Trusted Person) where any 2 cards unlock your backup.
-- **Encrypted Photo Snippets:** Attach up to 10 compressed offline photos (~80–120 KB) of shut-off valves, breaker panels, or insurance cards inside your encrypted backup.
-- **Readiness Audit, 10-Minute Fire Drill & 6-Month `.ics` Reminders:** Flags real-world gaps (missing joint bank account, missing beneficiaries, missing phone/2FA unlock, exposed seeds/IDs, stale backups) and exports recurring `.ics` calendar reminders.
+- **7 Actionable Emergency Playbooks + Calm Read Mode:** Hospital/incapacitation, Chronic/critical illness, Passing away, Handling big money, Money emergency, Both parents unreachable (Caregiver guide), and Work-visa/cross-border emergency—with deep-links (`↳ Money → Insurance`), Call & claim log, `A+` large text, High Contrast mode, `/` instant search, and 1-page Executive Summary.
+- **Chronic & Critical Illness Care + 1-Page ER Grab Sheet:** Diagnosis/protocol, 24/7 triage line, red-flag fever rules, ports/implants & arm restrictions, rescue meds, portal proxy/HIPAA, plus 1-click **+ Section** templates.
+- **Beginner's Guide to Big Money & Insurance Payouts:** 6-part plain-English survivor guide (decision freeze, deposit caps, 4-Bucket `$1M` / `₹2 Cr` / `£500k` / `€500k` allocation, fee-only fiduciaries, scam scripts, monthly routine).
+- **9 Country & Cross-Border Presets:** United States, US + India (H-1B / Visa / NRI), India, Cross-Border / Work Visa (Any 2 Countries), United Kingdom, Canada, Australia, European Union, and International / Generic.
+- **Crypto, Key IDs & Finding Vetted / Free Help:** Safe hardware-wallet/seed location mapping, last-4 ID mapping, and localized directories for Bar-referred lawyers, AILA/IAA/CICC/OMARA immigration counsel, fee-only fiduciaries, IRS VITA / CVITP / ATO / NALSA legal aid, EAP, and Dollar For.
+- **Two-Spouse Smart Merge & Family Fire Drill:** Merge updates from two devices with conflict preview, attach up to 10 encrypted compressed reference photos, run the 10-minute annual fire drill, and export 6-month `.ics` calendar reminders.
 
 ---
 
-## Quick Start & Install as an App
+## Architecture & Building From Source
 
-### 1. Run Online or via GitHub Pages (Recommended)
-Fork this repository and turn on **Settings → Pages** (deploy from `main` branch, root `/`) to get your own HTTPS URL accessible from any phone or laptop.
+All 6 platforms share one canonical schema ([schema.js](schema.js) + [regions.js](regions.js) → [shared/guide-data.json](shared/guide-data.json)) and one design token spec ([shared/design-tokens.json](shared/design-tokens.json)), continuously verified by [tests/test_design_parity.py](tests/test_design_parity.py) and [tests/web_tests.js](tests/web_tests.js).
 
-### 2. Install as an Offline App (Android, iOS, Windows, Mac & Linux)
-Once opened over HTTPS (such as GitHub Pages), you can install **Our Family Field Guide** like a native app with zero app-store accounts or fees:
-- **Android (Chrome / Edge / Brave):** Click **Install App** in the top bar (or browser menu **⋮ → Install app**).
-- **iPhone / iPad (Safari):** Tap **Share** (`↑`) → **Add to Home Screen** → **Add**. *(Important: Safari can evict unused web storage after prolonged inactivity, so also keep a locked standalone `.html` backup saved in Apple Files / iCloud Drive.)*
-- **Windows / Mac / Linux (Desktop PWA or Native App):** Click **Install App** (or the install icon in Chrome/Edge/Brave's address bar; on macOS Safari, use **File → Add to Dock**). Prefer pure native OS apps instead of a browser? See **Pure Native Apps** below.
-
-### 3. Pure Native Apps (All 5 Platforms)
-Want native OS apps with zero browser/WebView runtime? Every native app shares one single-source-of-truth schema ([`shared/guide-data.json`](shared/guide-data.json)) and one byte-for-byte `PBKDF2` + `AES-256-GCM` + `2-of-3 Shamir` backup format ([`shared/BACKUP_FORMAT.md`](shared/BACKUP_FORMAT.md)):
-- **macOS & iOS:** Pure Swift + SwiftUI + CryptoKit (`native/apple/` — Face ID / Touch ID + Apple Files)
-- **Android:** Pure Kotlin + Jetpack Compose (`native/android/` — BiometricPrompt + zero `INTERNET` permission)
-- **Windows:** Pure C# + .NET 8 WPF (`native/windows/` — single-file `FamilyFieldGuide.exe`)
-- **Linux:** Pure Rust + GTK4 (`native/linux/` — zero-WebView native desktop binary)
-
-### 4. Share With Your Spouse
-Use **Save backup → Standalone locked HTML (.html)**, store the file in two safe places (e.g. USB drive + shared family cloud), print the **1-page Break-Glass Cover Sheet** for your fireproof box, and run the **10-Minute Family Fire Drill** once a year.
-
----
-
-## Files
-
-| File | What it does |
+| Path | Purpose |
 |---|---|
-| `index.html` | Page shell, iOS/PWA meta tags & manifest link |
-| `styles.css` | Editorial paper UI, `A+`, high-contrast & print sheets |
-| `schema.js` | **Core content**: playbooks, scripts, money guide, pro finder, sections, fire drill |
-| `regions.js` | **9 country & cross-border presets**, localized directories, demo families, Diceware wordlist |
-| `app.js` | Storage, rendering, readiness audit, smart merge, Shamir split, photo compression, AES-GCM backups |
-| `manifest.json` / `sw.js` / `icon*` / `apple-touch-icon.png` | Offline PWA & iOS/Android/Desktop icons |
-| `.github/workflows/` & `tests/` | Automated CI, cross-platform design parity checks, and native app build workflows |
-| `shared/` & `native/apple/` | Shared data/crypto interop spec + pure native SwiftUI apps for macOS & iOS |
-| `native/android/` | Pure native Kotlin + Jetpack Compose Android app (zero `INTERNET` permission) |
-| `native/windows/` | Pure native C# + .NET 8 WPF Windows desktop app |
-| `native/linux/` | Pure native Rust + GTK4 Linux desktop app & core crate |
-| `SECURITY.md` | Threat model, cryptographic details & safe-use rules |
-| `CONTRIBUTING.md` | How to extend sections or add your country preset |
+| `index.html`, `styles.css`, `schema.js`, `regions.js`, `app.js`, `sw.js`, `manifest.json` | Zero-build, zero-dependency Web / Offline PWA |
+| `shared/` | Schema exporter (`sync_schema.py`), `guide-data.json`, `design-tokens.json`, & `BACKUP_FORMAT.md` |
+| `native/apple/` | Pure Swift + SwiftUI macOS & iOS package + `FamilyGuideCoreTests` & `FamilyGuideUITests` |
+| `native/android/` | Pure Kotlin + Jetpack Compose + Material 3 Android app (`minSdk 26`, JUnit suite) |
+| `native/windows/` | Pure C# + .NET 8 WPF app + `FamilyGuide.Core.Tests` (xUnit) |
+| `native/linux/` | Pure Rust + GTK4 app & `family-guide-core` crate + Rust unit tests |
+| `tests/` | `web_tests.js` & `test_design_parity.py` (hex colors, fonts, logos, icons, canonical ordering, schema sync) |
+| `.github/workflows/` | Automated CI (`ci.yml`), per-platform builds, and multi-platform release workflow (`release.yml`) |
+
+```bash
+# Sync shared schema from JS source of truth & run cross-platform parity + Web tests
+python3 shared/sync_schema.py
+python3 tests/test_design_parity.py
+node tests/web_tests.js
+
+# Build / test native targets
+swift test --package-path native/apple && swift run --package-path native/apple FamilyGuideMac
+cd native/android && gradle testDebugUnitTest assembleDebug
+dotnet test native/windows/FamilyGuide.Core.Tests/FamilyGuide.Core.Tests.csproj
+cargo test --manifest-path native/linux/Cargo.toml -p family-guide-core
+```
 
 ---
 
-## Extending & Contributing
+## Extending & License
 
-- **No code needed:** Click **+ Section** (choose from 8 templates including Illness Care, Visa/Cross-Border, Smart Home, Crypto/Homelab, Small Business, Aging Parents) or add fields/tables at the bottom of any section.
-- **Contribute your country or improvements:** See [CONTRIBUTING.md](CONTRIBUTING.md) for the `regions.js` country template and schema rules (never rename existing IDs so older `familyFieldGuide.v1` backups stay 100% compatible).
-
-## License & Disclaimer
-
-Released under the [MIT License](LICENSE). General educational organization guidance only—not legal, tax, medical, or financial advice. Consult licensed local professionals for what applies where you live.
+- **Add custom sections in the UI:** Click **+ Section** (choose from 8 ready-made templates or build custom fields & tables).
+- **Contribute a country preset or improvement:** See [CONTRIBUTING.md](CONTRIBUTING.md).
+- **License:** [MIT License](LICENSE). General educational organization guidance only—not legal, tax, medical, or financial advice.
