@@ -674,15 +674,18 @@ fn build_ui(app: &Application) {
                 let set_locked_w = set_locked_l.clone();
                 let entry_w = entry_clear.clone();
                 let err_w = err_clear.clone();
+                let pw_in_w = pw_in.clone();
+                let pw_confirm_w = pw_confirm.clone();
+                let msg_lbl_w = msg_lbl.clone();
                 go_btn.connect_clicked(move |_| {
-                    let pw = pw_in.text().to_string();
-                    let confirm = pw_confirm.text().to_string();
+                    let pw = pw_in_w.text().to_string();
+                    let confirm = pw_confirm_w.text().to_string();
                     if pw.trim().len() < 8 {
-                        msg_lbl.set_text("Use at least 8 characters for the local lock passphrase.");
+                        msg_lbl_w.set_text("Use at least 8 characters for the local lock passphrase.");
                         return;
                     }
                     if pw != confirm {
-                        msg_lbl.set_text("Passphrases do not match.");
+                        msg_lbl_w.set_text("Passphrases do not match.");
                         return;
                     }
                     let res = store_w.borrow_mut().enable_local_lock(&pw);
@@ -694,7 +697,7 @@ fn build_ui(app: &Application) {
                             set_locked_w(true);
                             modal_w.close();
                         }
-                        Err(e) => msg_lbl.set_text(&e),
+                        Err(e) => msg_lbl_w.set_text(&e),
                     }
                 });
 

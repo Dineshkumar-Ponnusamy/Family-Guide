@@ -214,6 +214,8 @@ assert(safeImgUrl("data:image/jpeg;base64,/9j/4AAQ") === "data:image/jpeg;base64
 
 // 11. 2048-word Diceware, fail-closed CSPRNG, sanitization & full-state audit
 assert(DICE_WORDS.length === 2048 && new Set(DICE_WORDS).size === 2048, "2048 unique DICE_WORDS");
+const prevCryptoDesc = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+Object.defineProperty(globalThis, "crypto", { value: undefined, configurable: true, writable: true });
 let threwNoCrypto = false;
 try { generatePassphrase(6); } catch { threwNoCrypto = true; }
 assert(threwNoCrypto, "generatePassphrase fails closed without CSPRNG");
@@ -221,17 +223,22 @@ threwNoCrypto = false;
 try { sssSplit2of3("test-secret"); } catch { threwNoCrypto = true; }
 assert(threwNoCrypto, "sssSplit2of3 fails closed without CSPRNG");
 
-globalThis.crypto = {
-  getRandomValues(arr) {
-    for (let i = 0; i < arr.length; i++) arr[i] = (i * 137 + 42) & 0xff;
-    return arr;
-  }
-};
+Object.defineProperty(globalThis, "crypto", {
+  value: {
+    getRandomValues(arr) {
+      for (let i = 0; i < arr.length; i++) arr[i] = (i * 137 + 42) & 0xff;
+      return arr;
+    }
+  },
+  configurable: true,
+  writable: true
+});
 const pw6 = generatePassphrase(6);
 assert(pw6.split("-").length === 6, "6-word passphrase generated");
 const splitShares = sssSplit2of3(pw6);
 assert(splitShares.length === 3 && sssCombine2of3(splitShares[0], splitShares[2]) === pw6, "Shamir round-trip with 6-word passphrase");
-delete globalThis.crypto;
+if (prevCryptoDesc) Object.defineProperty(globalThis, "crypto", prevCryptoDesc);
+else delete globalThis.crypto;
 
 const polluted = JSON.parse('{"__proto__":{"polluted":true},"f":{"m_first":"123-45-6789","d_pm":"one two three four five six seven eight nine ten eleven twelve","letter":"one two three four five six seven eight nine ten eleven twelve thirteen"},"photos":[{"id":"p1","label":"bad","dataUrl":"javascript:alert(1)"},{"id":"p2","label":"ok","dataUrl":"data:image/png;base64,AAAA"}]}');
 const sanitized = sanitizeState(polluted);

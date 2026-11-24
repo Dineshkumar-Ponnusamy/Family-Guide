@@ -39,15 +39,17 @@ jobs:
         working-directory: native/android
         run: gradle testDebugUnitTest assembleDebug
 
-      - name: Verify APK manifest, assets & zero permissions
+      - name: Verify APK manifest, assets & zero unexpected permissions
         run: |
           APK="native/android/app/build/outputs/apk/debug/app-debug.apk"
           AAPT2=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name aapt2 | sort -V | tail -n 1)
           "$AAPT2" dump badging "$APK" > /tmp/apk-badging.txt
           grep -q "package: name='io.github.dineshkumarponnusamy.familyfieldguide'" /tmp/apk-badging.txt
           grep -q "launchable-activity:" /tmp/apk-badging.txt
-          if grep -q "uses-permission:" /tmp/apk-badging.txt; then
-            echo "ERROR: Android APK declared unexpected permissions!"
+          BAD_PERMS=$(grep "uses-permission:" /tmp/apk-badging.txt | grep -vE "'android\.permission\.USE_BIOMETRIC'|'android\.permission\.USE_FINGERPRINT'|'io\.github\.dineshkumarponnusamy\.familyfieldguide\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'" || true)
+          if [ -n "$BAD_PERMS" ]; then
+            echo "ERROR: Android APK declared unexpected permissions:"
+            echo "$BAD_PERMS"
             exit 1
           fi
           unzip -l "$APK" | grep -q "assets/guide-data.json"

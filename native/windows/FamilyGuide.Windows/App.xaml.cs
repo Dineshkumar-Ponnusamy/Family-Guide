@@ -16,10 +16,11 @@ public partial class App : System.Windows.Application
         if (e.Args.Contains("--smoke-test") || smokeOutPath != null)
         {
             int code = RunSmokeTest(smokeOutPath);
-            Shutdown(code);
+            Environment.Exit(code);
             return;
         }
         base.OnStartup(e);
+        new MainWindow().Show();
     }
 
     private static int RunSmokeTest(string? smokeOutPath)
