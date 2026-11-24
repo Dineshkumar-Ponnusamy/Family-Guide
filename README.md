@@ -75,7 +75,7 @@ Fork this repository and turn on **Settings → Pages** (deploy from `main` bran
 Once opened over HTTPS (such as GitHub Pages), you can install **Our Family Field Guide** like a native app with zero app-store accounts or fees:
 - **Android (Chrome / Edge / Brave):** Click **Install App** in the top bar (or browser menu **⋮ → Install app**).
 - **iPhone / iPad (Safari):** Tap **Share** (`↑`) → **Add to Home Screen** → **Add**. *(Important: Safari can evict unused web storage after prolonged inactivity, so also keep a locked standalone `.html` backup saved in Apple Files / iCloud Drive.)*
-- **Windows / Mac / Linux (Desktop PWA or Native App):** Click **Install App** (or the install icon in Chrome/Edge/Brave's address bar; on macOS Safari, use **File → Add to Dock**). Prefer standalone desktop installers (`.dmg`, `.msi`, `.AppImage`, `.deb`)? See the optional zero-touch **Tauri v2 wrapper** in [`desktop/README.md`](desktop/README.md) (automated multi-OS builds via GitHub Actions).
+- **Windows / Mac / Linux (Desktop PWA or Native App):** Click **Install App** (or the install icon in Chrome/Edge/Brave's address bar; on macOS Safari, use **File → Add to Dock**). Prefer pure native OS apps instead of a browser? See **Pure Native Apps** below.
 
 ### 3. Pure Native Apps (All 5 Platforms)
 Want native OS apps with zero browser/WebView runtime? Every native app shares one single-source-of-truth schema ([`shared/guide-data.json`](shared/guide-data.json)) and one byte-for-byte `PBKDF2` + `AES-256-GCM` + `2-of-3 Shamir` backup format ([`shared/BACKUP_FORMAT.md`](shared/BACKUP_FORMAT.md)):
@@ -99,7 +99,7 @@ Use **Save backup → Standalone locked HTML (.html)**, store the file in two sa
 | `regions.js` | **9 country & cross-border presets**, localized directories, demo families, Diceware wordlist |
 | `app.js` | Storage, rendering, readiness audit, smart merge, Shamir split, photo compression, AES-GCM backups |
 | `manifest.json` / `sw.js` / `icon*` / `apple-touch-icon.png` | Offline PWA & iOS/Android/Desktop icons |
-| `desktop/` & `.github/workflows/` | Optional Tauri v2 desktop app wrapper (Mac/Windows/Linux) & CI/Release workflows |
+| `.github/workflows/` & `tests/` | Automated CI, cross-platform design parity checks, and native app build workflows |
 | `shared/` & `native/apple/` | Shared data/crypto interop spec + pure native SwiftUI apps for macOS & iOS |
 | `native/android/` | Pure native Kotlin + Jetpack Compose Android app (zero `INTERNET` permission) |
 | `native/windows/` | Pure native C# + .NET 8 WPF Windows desktop app |

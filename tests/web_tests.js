@@ -204,8 +204,8 @@ assert(els.dlgForm.innerHTML.includes("iPhone / iPad") && !els.dlgForm.innerHTML
 deferredInstallPrompt = { prompt: () => Promise.resolve(), userChoice: Promise.resolve({ outcome: "accepted" }) };
 installAppDialog();
 assert(els.dlgForm.innerHTML.includes("doInstall"), "install guide shows prompt button");
-window.__TAURI_INTERNALS__ = {};
-assert(isStandaloneApp() === true, "tauri desktop counts as standalone app");
-delete window.__TAURI_INTERNALS__;
+window.navigator = { standalone: true };
+assert(isStandaloneApp() === true, "PWA standalone mode counts as standalone app");
+delete window.navigator;
 
 outPrint("ALL_WEB_TESTS_PASSED");

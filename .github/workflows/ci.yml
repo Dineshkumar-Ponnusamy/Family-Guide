@@ -21,9 +21,8 @@ jobs:
       - name: Validate JSON configurations
         run: |
           python3 -m json.tool manifest.json > /dev/null
-          python3 -m json.tool desktop/package.json > /dev/null
-          python3 -m json.tool desktop/src-tauri/tauri.conf.json > /dev/null
-          python3 -m json.tool desktop/src-tauri/capabilities/default.json > /dev/null
+          python3 -m json.tool shared/design-tokens.json > /dev/null
+          python3 -m json.tool shared/guide-data.json > /dev/null
 
       - name: Syntax-check JavaScript & run Web test suite
         run: |
@@ -31,15 +30,7 @@ jobs:
           node --check regions.js
           node --check app.js
           node --check sw.js
-          node --check desktop/sync-web.mjs
           node tests/web_tests.js
 
       - name: Run Cross-Platform Design, Logo & Schema Parity checks
         run: python3 tests/test_design_parity.py
-
-      - name: Verify desktop runtime asset sync
-        run: |
-          node desktop/sync-web.mjs
-          test -f desktop/dist/index.html
-          test -f desktop/dist/app.js
-          test -f desktop/dist/icon-512.png

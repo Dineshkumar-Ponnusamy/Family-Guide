@@ -48,7 +48,6 @@ fn build_ui(app: &Application) {
             GuideStore::new_in_memory().expect("embedded schema loads")
         }),
     ));
-    let is_locked = Rc::new(Cell::new(false));
     let is_syncing = Rc::new(Cell::new(false));
 
     let win = ApplicationWindow::builder()
@@ -493,9 +492,7 @@ fn build_ui(app: &Application) {
     {
         let lock_box_c = lock_box.clone();
         let paned_c = paned.clone();
-        let locked_c = is_locked.clone();
         lock_btn.connect_clicked(move |_| {
-            locked_c.set(true);
             paned_c.set_visible(false);
             lock_box_c.set_visible(true);
         });
@@ -504,9 +501,7 @@ fn build_ui(app: &Application) {
     {
         let lock_box_c = lock_box.clone();
         let paned_c = paned.clone();
-        let locked_c = is_locked.clone();
         unlock_btn.connect_clicked(move |_| {
-            locked_c.set(false);
             lock_box_c.set_visible(false);
             paned_c.set_visible(true);
         });

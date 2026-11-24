@@ -45,9 +45,7 @@ public struct RootView: View {
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .summary:
-                SummarySheetView(store: store) { tab, block in
-                    jumpTo(tab: tab, block: block)
-                }
+                SummarySheetView(store: store)
             case .erGrab:
                 ErGrabSheetView(store: store)
             case .readiness:

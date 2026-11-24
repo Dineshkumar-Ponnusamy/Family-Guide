@@ -1,11 +1,9 @@
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using FamilyGuide.Core;
-using Microsoft.Win32;
 
 namespace FamilyGuide.Windows;
 
@@ -218,7 +216,7 @@ public partial class MainWindow : Window
             {
                 var card = MakeCard(dark: true);
                 var sp = new StackPanel();
-                sp.Children.Add(new TextBlock { Text = "If you read nothing else", FontFamily = new FontFamily("Georgia"), FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("PaperBrush"), Margin = new Thickness(0, 0, 0, 8) });
+                sp.Children.Add(new TextBlock { Text = "If you read nothing else", FontFamily = Serif, FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("PaperBrush"), Margin = new Thickness(0, 0, 0, 8) });
                 foreach (var g in _store.Data.GLANCE)
                 {
                     var rf = _store.LocalizedField(new FieldDef(g.id, g.label, g.placeholder));
@@ -244,7 +242,7 @@ public partial class MainWindow : Window
             {
                 var card = MakeCard();
                 var sp = new StackPanel();
-                sp.Children.Add(new TextBlock { Text = "What's happening?", FontFamily = new FontFamily("Georgia"), FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
+                sp.Children.Add(new TextBlock { Text = "What's happening?", FontFamily = Serif, FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
                 var wp = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
                 foreach (var key in PlaybookOrder)
                 {
@@ -268,7 +266,7 @@ public partial class MainWindow : Window
                 {
                     foreach (var ph in pb.phases)
                     {
-                        sp.Children.Add(new TextBlock { Text = ph.whenLabel, FontFamily = new FontFamily("Georgia"), FontStyle = FontStyles.Italic, FontSize = 17, Foreground = Br("TomatoBrush"), Margin = new Thickness(0, 8, 0, 4) });
+                        sp.Children.Add(new TextBlock { Text = ph.whenLabel, FontFamily = Serif, FontStyle = FontStyles.Italic, FontSize = 17, Foreground = Br("TomatoBrush"), Margin = new Thickness(0, 8, 0, 4) });
                         foreach (var rawS in ph.steps)
                         {
                             var s = _store.LocalizedStep(rawS);
@@ -306,7 +304,7 @@ public partial class MainWindow : Window
 
                 var card = MakeCard();
                 var sp = new StackPanel();
-                sp.Children.Add(new TextBlock { Text = b.title ?? "", FontFamily = new FontFamily("Georgia"), FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush") });
+                sp.Children.Add(new TextBlock { Text = b.title ?? "", FontFamily = Serif, FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush") });
                 if (!string.IsNullOrEmpty(b.hint))
                     sp.Children.Add(new TextBlock { Text = b.hint, FontSize = 12, Foreground = Br("Ink2Brush"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 8) });
                 foreach (var rf in visible)
@@ -342,7 +340,7 @@ public partial class MainWindow : Window
 
                 var card = MakeCard();
                 var sp = new StackPanel();
-                sp.Children.Add(new TextBlock { Text = b.title ?? "", FontFamily = new FontFamily("Georgia"), FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush") });
+                sp.Children.Add(new TextBlock { Text = b.title ?? "", FontFamily = Serif, FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush") });
                 if (!string.IsNullOrEmpty(loc.hint))
                     sp.Children.Add(new TextBlock { Text = loc.hint, FontSize = 12, Foreground = Br("Ink2Brush"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 8) });
 
@@ -403,7 +401,7 @@ public partial class MainWindow : Window
             {
                 var card = MakeCard();
                 var sp = new StackPanel();
-                sp.Children.Add(new TextBlock { Text = b.title ?? "Beginner's guide: handling big money", FontFamily = new FontFamily("Georgia"), FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
+                sp.Children.Add(new TextBlock { Text = b.title ?? "Beginner's guide: handling big money", FontFamily = Serif, FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
                 if (_store.CurrentRegion.moneyGuide is { } mg)
                 {
                     var banner = new Border { Background = Br("WarnBgBrush"), Padding = new Thickness(10), Margin = new Thickness(0, 0, 0, 8) };
@@ -423,7 +421,7 @@ public partial class MainWindow : Window
             {
                 var card = MakeCard();
                 var sp = new StackPanel();
-                sp.Children.Add(new TextBlock { Text = b.title ?? "How to find vetted & low-cost help", FontFamily = new FontFamily("Georgia"), FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
+                sp.Children.Add(new TextBlock { Text = b.title ?? "How to find vetted & low-cost help", FontFamily = Serif, FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
                 if (_store.CurrentRegion.proFinder is { } pf)
                 {
                     var banner = new Border { Background = Br("WarnBgBrush"), Padding = new Thickness(10), Margin = new Thickness(0, 0, 0, 8) };
@@ -444,11 +442,11 @@ public partial class MainWindow : Window
             {
                 var card = MakeCard();
                 var sp = new StackPanel();
-                sp.Children.Add(new TextBlock { Text = "What to say", FontFamily = new FontFamily("Georgia"), FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
+                sp.Children.Add(new TextBlock { Text = "What to say", FontFamily = Serif, FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
                 foreach (var sc in _store.Data.SCRIPTS)
                 {
                     sp.Children.Add(new TextBlock { Text = sc.title.ToUpperInvariant(), FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Br("Ink2Brush") });
-                    sp.Children.Add(new TextBlock { Text = sc.body, FontFamily = new FontFamily("Georgia"), FontStyle = FontStyles.Italic, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 10) });
+                    sp.Children.Add(new TextBlock { Text = sc.body, FontFamily = Serif, FontStyle = FontStyles.Italic, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 10) });
                 }
                 card.Child = sp;
                 ContentHost.Children.Add(card);
@@ -460,7 +458,7 @@ public partial class MainWindow : Window
                 if (_store.State.readMode && string.IsNullOrWhiteSpace(val)) return;
                 var card = MakeCard();
                 var sp = new StackPanel();
-                sp.Children.Add(new TextBlock { Text = "A note to you", FontFamily = new FontFamily("Georgia"), FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
+                sp.Children.Add(new TextBlock { Text = "A note to you", FontFamily = Serif, FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Br("InkBrush"), Margin = new Thickness(0, 0, 0, 8) });
                 var tb = new TextBox { Text = val, IsReadOnly = _store.State.readMode, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 110, Padding = new Thickness(8) };
                 if (!_store.State.readMode) tb.TextChanged += (_, _) => { _store.State.f["letter"] = tb.Text; _store.Save(); UpdateMeter(); };
                 sp.Children.Add(tb);
@@ -540,7 +538,7 @@ public partial class MainWindow : Window
                     var tb = new TextBox { Text = cval, IsReadOnly = _store.State.readMode, Padding = new Thickness(6, 3, 6, 3), Margin = new Thickness(0, 1, 0, 5) };
                     if (!_store.State.readMode)
                     {
-                        int rIdx = r; string cKey = col.key; string lid = x.id;
+                        int rIdx = r; string cKey = col.key;
                         tb.TextChanged += (_, _) => { if (rIdx < rows.Count) { rows[rIdx][cKey] = tb.Text; _store.Save(); UpdateMeter(); } };
                     }
                     rowSp.Children.Add(tb);

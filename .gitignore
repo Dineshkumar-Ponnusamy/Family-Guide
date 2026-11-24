@@ -9,13 +9,6 @@ gitignore.txt
 *.backup.json
 .DS_Store
 
-# Desktop (Tauri) build outputs & generated assets
-desktop/dist/
-desktop/node_modules/
-desktop/src-tauri/target/
-desktop/src-tauri/gen/
-desktop/src-tauri/icons/
-
 # Pure native Apple (SwiftPM / Xcode) build artifacts
 native/apple/.build/
 native/apple/.swiftpm/

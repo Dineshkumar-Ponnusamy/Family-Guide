@@ -31,7 +31,7 @@ const fs = require("fs");
 const vm = require("vm");
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(process.argv[1], "utf8") + "\n" + fs.readFileSync(process.argv[2], "utf8") + "\nJSON.stringify({ TABS, PLAYBOOK, SCRIPTS, MONEY_GUIDE, PRO_FINDER, GLANCE, KIDS, ESSENTIALS, SECTION_TEMPLATES, FIRE_DRILL, REGIONS, DEMO_FAMILIES, DICE_WORDS }, null, 2);", ctx);
+vm.runInContext(fs.readFileSync(process.argv[1], "utf8") + "\n" + fs.readFileSync(process.argv[2], "utf8"), ctx);
 console.log(vm.runInContext("JSON.stringify({ TABS, PLAYBOOK, SCRIPTS, MONEY_GUIDE, PRO_FINDER, GLANCE, KIDS, ESSENTIALS, SECTION_TEMPLATES, FIRE_DRILL, REGIONS, DEMO_FAMILIES, DICE_WORDS }, null, 2)", ctx));
 '''
 

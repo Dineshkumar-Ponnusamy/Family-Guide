@@ -22,7 +22,6 @@ public struct BackupFileDocument: FileDocument {
 
 public struct SummarySheetView: View {
     let store: GuideStore
-    let onJump: (String, String?) -> Void
     @Environment(\.dismiss) private var dismiss
 
     public var body: some View {
