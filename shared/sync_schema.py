@@ -40,10 +40,10 @@ def run_export():
     regions_js = os.path.join(ROOT, "regions.js")
     if os.path.exists(JSC):
         script = f'const SCHEMA_PATH = {json.dumps(schema_js)}; const REGIONS_PATH = {json.dumps(regions_js)};\n' + JS_DUMP
-        res = subprocess.run([JSC, "-e", script], capture_output=True, text=True, check=True)
+        res = subprocess.run([JSC, "-e", script], capture_output=True, text=True, encoding="utf-8", check=True)
         raw = res.stdout
     else:
-        res = subprocess.run(["node", "-e", NODE_DUMP, schema_js, regions_js], capture_output=True, text=True, check=True)
+        res = subprocess.run(["node", "-e", NODE_DUMP, schema_js, regions_js], capture_output=True, text=True, encoding="utf-8", check=True)
         raw = res.stdout
 
     data = json.loads(raw)

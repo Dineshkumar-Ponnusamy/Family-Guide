@@ -2,7 +2,8 @@ use std::f64::consts::PI;
 
 use gtk4::cairo;
 use gtk4::gdk;
-use gtk4::prelude::DrawingAreaExtManual;
+use gtk4::gdk::prelude::DisplayExt;
+use gtk4::prelude::{DrawingAreaExtManual, WidgetExt};
 use gtk4::{CssProvider, DrawingArea, Widget};
 
 pub const WARM_PAPER_CSS: &str = r#"

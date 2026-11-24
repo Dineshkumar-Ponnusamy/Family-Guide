@@ -31,7 +31,7 @@ fn modal_window(parent: &impl IsA<Window>, title: &str, w: i32, h: i32) -> Windo
         .build()
 }
 
-pub fn show_search_dialog(parent: &Window, store: SharedStore, on_refresh: RefreshFn) {
+pub fn show_search_dialog(parent: &impl IsA<Window>, store: SharedStore, on_refresh: RefreshFn) {
     let win = modal_window(parent, "Search Family Field Guide", 640, 520);
     let root = GtkBox::new(Orientation::Vertical, 10);
     root.set_margin_top(14);
@@ -122,7 +122,7 @@ pub fn show_search_dialog(parent: &Window, store: SharedStore, on_refresh: Refre
     win.present();
 }
 
-pub fn show_text_sheet_dialog(parent: &Window, title: &str, default_filename: &str, content: String) {
+pub fn show_text_sheet_dialog(parent: &impl IsA<Window>, title: &str, default_filename: &str, content: String) {
     let win = modal_window(parent, title, 720, 600);
     let root = GtkBox::new(Orientation::Vertical, 10);
     root.set_margin_top(14);
@@ -191,7 +191,7 @@ pub fn show_text_sheet_dialog(parent: &Window, title: &str, default_filename: &s
     win.present();
 }
 
-pub fn show_audit_dialog(parent: &Window, store: SharedStore, on_refresh: RefreshFn) {
+pub fn show_audit_dialog(parent: &impl IsA<Window>, store: SharedStore, on_refresh: RefreshFn) {
     let win = modal_window(parent, "Readiness Audit & 10-Minute Fire Drill", 720, 640);
     let root = GtkBox::new(Orientation::Vertical, 12);
     root.set_margin_top(14);
@@ -305,7 +305,7 @@ pub fn show_audit_dialog(parent: &Window, store: SharedStore, on_refresh: Refres
     win.present();
 }
 
-pub fn show_save_backup_dialog(parent: &Window, store: SharedStore, on_refresh: RefreshFn) {
+pub fn show_save_backup_dialog(parent: &impl IsA<Window>, store: SharedStore, on_refresh: RefreshFn) {
     let win = modal_window(parent, "Save Encrypted Backup (AES-256-GCM)", 640, 560);
     let root = GtkBox::new(Orientation::Vertical, 10);
     root.set_margin_top(14);
@@ -458,7 +458,7 @@ pub fn show_save_backup_dialog(parent: &Window, store: SharedStore, on_refresh: 
     win.present();
 }
 
-pub fn show_open_merge_dialog(parent: &Window, store: SharedStore, on_refresh: RefreshFn) {
+pub fn show_open_merge_dialog(parent: &impl IsA<Window>, store: SharedStore, on_refresh: RefreshFn) {
     let win = modal_window(parent, "Open / Two-Spouse Smart Merge Backup", 660, 560);
     let root = GtkBox::new(Orientation::Vertical, 10);
     root.set_margin_top(14);
@@ -636,7 +636,7 @@ pub fn show_open_merge_dialog(parent: &Window, store: SharedStore, on_refresh: R
     win.present();
 }
 
-pub fn show_add_section_dialog(parent: &Window, store: SharedStore, on_refresh: RefreshFn) {
+pub fn show_add_section_dialog(parent: &impl IsA<Window>, store: SharedStore, on_refresh: RefreshFn) {
     let win = modal_window(parent, "+ Add Custom Section", 560, 520);
     let root = GtkBox::new(Orientation::Vertical, 10);
     root.set_margin_top(14);
