@@ -36,12 +36,16 @@ jobs:
         run: dotnet test native/windows/FamilyGuide.Core.Tests/FamilyGuide.Core.Tests.csproj -c Release
 
       - name: Publish self-contained single-file Windows .exe
-        run: dotnet publish native/windows/FamilyGuide.Windows/FamilyGuide.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o native/windows/publish
+        run: dotnet publish native/windows/FamilyGuide.Windows/FamilyGuide.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o native/windows/publish
 
       - name: Verify Compiled Single-File Windows .exe
         shell: pwsh
         run: |
-          $exe = ".\native\windows\publish\FamilyFieldGuide.exe"
+          $isoDir = "$env:TEMP\ffg-win-isolated"
+          if (Test-Path $isoDir) { Remove-Item $isoDir -Recurse -Force }
+          New-Item -ItemType Directory -Path $isoDir | Out-Null
+          $exe = Join-Path $isoDir "FamilyFieldGuide.exe"
+          Copy-Item .\native\windows\publish\FamilyFieldGuide.exe $exe
           $outFile = "$env:TEMP\ffg-win-smoke.txt"
           if (Test-Path $outFile) { Remove-Item $outFile -Force }
           $proc = Start-Process -FilePath $exe -ArgumentList "--smoke-test-out=$outFile" -Wait -PassThru
@@ -54,6 +58,7 @@ jobs:
           Start-Sleep -Seconds 4
           if ($gui.HasExited) { throw "Windows GUI exited prematurely with $($gui.ExitCode)" }
           Stop-Process -Id $gui.Id -Force
+          Remove-Item $isoDir -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: Upload Windows .exe artifact
         uses: actions/upload-artifact@v4

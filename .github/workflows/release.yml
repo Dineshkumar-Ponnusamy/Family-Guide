@@ -222,7 +222,7 @@ jobs:
         run: dotnet test native/windows/FamilyGuide.Core.Tests/FamilyGuide.Core.Tests.csproj -c Release
 
       - name: Publish self-contained single-file Windows .exe
-        run: dotnet publish native/windows/FamilyGuide.Windows/FamilyGuide.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o native/windows/publish
+        run: dotnet publish native/windows/FamilyGuide.Windows/FamilyGuide.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o native/windows/publish
 
       - name: Stage Windows release .exe
         run: Copy-Item native/windows/publish/FamilyFieldGuide.exe Our-Family-Field-Guide-Windows-x64.exe
