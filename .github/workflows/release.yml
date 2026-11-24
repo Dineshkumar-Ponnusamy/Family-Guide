@@ -173,18 +173,39 @@ jobs:
           gradle-version: 8.9
 
       - name: Sync schema, test & build Android APK
-        run: python3 shared/sync_schema.py
-
-      - working-directory: native/android
-        run: gradle testDebugUnitTest assembleDebug
-
-      - name: Stage release APK
-        run: cp native/android/app/build/outputs/apk/debug/app-debug.apk Our-Family-Field-Guide-Android.apk
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          python3 shared/sync_schema.py
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
+            echo "Building signed release APK..."
+            trap 'rm -f /tmp/ffg-release.jks' EXIT
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > /tmp/ffg-release.jks
+            export FFG_KEYSTORE_PATH="/tmp/ffg-release.jks"
+            export FFG_KEYSTORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+            export FFG_KEY_ALIAS="$ANDROID_KEY_ALIAS"
+            export FFG_KEY_PASSWORD="$ANDROID_KEY_PASSWORD"
+            (cd native/android && gradle testDebugUnitTest assembleRelease)
+            cp native/android/app/build/outputs/apk/release/app-release.apk Our-Family-Field-Guide-Android.apk
+          else
+            echo "Keystore secrets not configured; building preview debug APK..."
+            (cd native/android && gradle testDebugUnitTest assembleDebug)
+            cp native/android/app/build/outputs/apk/debug/app-debug.apk Our-Family-Field-Guide-Android-PREVIEW-debug.apk
+          fi
 
       - name: Verify Android APK manifest, assets & zero unexpected permissions
         run: |
+          if [ -f Our-Family-Field-Guide-Android.apk ]; then
+            APK_FILE="Our-Family-Field-Guide-Android.apk"
+          else
+            APK_FILE="Our-Family-Field-Guide-Android-PREVIEW-debug.apk"
+          fi
+          test -f "$APK_FILE"
           AAPT2=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name aapt2 | sort -V | tail -n 1)
-          "$AAPT2" dump badging Our-Family-Field-Guide-Android.apk > /tmp/apk-badging.txt
+          "$AAPT2" dump badging "$APK_FILE" > /tmp/apk-badging.txt
           head -n 20 /tmp/apk-badging.txt
           grep -q "package: name='io.github.dineshkumarponnusamy.familyfieldguide'" /tmp/apk-badging.txt
           grep -q "launchable-activity:" /tmp/apk-badging.txt
@@ -194,12 +215,12 @@ jobs:
             echo "$BAD_PERMS"
             exit 1
           fi
-          unzip -l Our-Family-Field-Guide-Android.apk | grep -q "assets/guide-data.json"
+          unzip -l "$APK_FILE" | grep -q "assets/guide-data.json"
 
       - uses: actions/upload-artifact@v4
         with:
           name: release-android
-          path: Our-Family-Field-Guide-Android.apk
+          path: Our-Family-Field-Guide-Android*.apk
 
   windows:
     name: Windows (Single-File .exe)
@@ -340,6 +361,14 @@ jobs:
           (cd release-assets && sha256sum Our-Family-Field-Guide-* > SHA256SUMS.txt)
           ls -lh release-assets
 
+          if [ -f release-assets/Our-Family-Field-Guide-Android.apk ]; then
+            export ANDROID_APK_NAME="Our-Family-Field-Guide-Android.apk"
+            export ANDROID_APK_NOTE="signed release APK"
+          else
+            export ANDROID_APK_NAME="Our-Family-Field-Guide-Android-PREVIEW-debug.apk"
+            export ANDROID_APK_NOTE="debug-signed preview APK; cannot upgrade a signed release in place"
+          fi
+
           cat > /tmp/release-notes.md <<'NOTES'
           ## Our Family Field Guide — Multi-Platform Release
 
@@ -352,7 +381,7 @@ jobs:
           | **Web / PWA (Any OS)** | `Our-Family-Field-Guide-Web-Offline.zip` | Or open the [Live Web App](https://dineshkumar-ponnusamy.github.io/Family-Guide/) directly — zero install needed |
           | **macOS (Apple Silicon)** | `Our-Family-Field-Guide-macOS-arm64.dmg` | Drag **Our Family Field Guide.app** to Applications *(Ad-hoc signed; allow via System Settings → Privacy & Security → Open Anyway)* |
           | **iOS (iPhone / iPad)** | `Our-Family-Field-Guide-iOS-Xcode-Source.zip` | Pure SwiftUI + Face ID package (`native/apple/`) ready to build onto iOS 17+ in Xcode |
-          | **Android (8.0+)** | `Our-Family-Field-Guide-Android.apk` | Pure Kotlin + Jetpack Compose with **zero `INTERNET` permission** in `AndroidManifest.xml` *(debug-signed sideload APK)* |
+          | **Android (8.0+)** | `__ANDROID_APK_NAME__` | Pure Kotlin + Jetpack Compose with **zero `INTERNET` permission** in `AndroidManifest.xml` *(__ANDROID_APK_NOTE__)* |
           | **Windows (x64)** | `Our-Family-Field-Guide-Windows-x64.exe` | Self-contained portable `.exe` (requires no separate .NET runtime) |
           | **Linux (x86_64 GTK4)** | `Our-Family-Field-Guide-Linux-x86_64.tar.gz` | Ubuntu 24.04+ / modern Linux (`glibc 2.39+`, `GTK 4.12+`); run `./install.sh` or build from source on older distros |
           | **Checksums** | `SHA256SUMS.txt` | Verify integrity with `sha256sum -c SHA256SUMS.txt` |
@@ -362,6 +391,8 @@ jobs:
           - **Byte-for-byte compatible encrypted backups:** `PBKDF2-HMAC-SHA256` (250,000 rounds, 16-byte salt) + `AES-256-GCM` (12-byte IV, `ciphertext || 16-byte tag`), plus `GF(256)` 2-of-3 Shamir Split Recovery Cards (`FFG-1-...`).
           - **Built-in Readiness Audits:** Flags accidental raw crypto seed phrases and full national IDs (SSN / Aadhaar).
           NOTES
+
+          python3 -c 'import os, pathlib; p = pathlib.Path("/tmp/release-notes.md"); p.write_text(p.read_text().replace("__ANDROID_APK_NAME__", os.environ["ANDROID_APK_NAME"]).replace("__ANDROID_APK_NOTE__", os.environ["ANDROID_APK_NOTE"]))'
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release edit "$TAG_NAME" --title "Our Family Field Guide $TAG_NAME" --notes-file /tmp/release-notes.md

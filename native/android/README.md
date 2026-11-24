@@ -27,4 +27,6 @@ Release builds enable R8 minification (`isMinifyEnabled = true`) and resource sh
 - `FFG_KEY_ALIAS`
 - `FFG_KEY_PASSWORD`
 
+In CI, `.github/workflows/release.yml` maps GitHub Actions secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD` to those `FFG_KEYSTORE_*` environment variables to publish a signed `Our-Family-Field-Guide-Android.apk`, and falls back to `Our-Family-Field-Guide-Android-PREVIEW-debug.apk` when those secrets are not configured.
+
 On GitHub, `.github/workflows/android.yml` automatically runs all unit tests and builds a downloadable `.apk` artifact.

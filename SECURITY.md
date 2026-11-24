@@ -31,7 +31,7 @@
    - On lock or after **15 minutes of inactivity**, the app wipes the visible DOM (`panels`, `printSheet`, banners, search results) and clears in-memory state/key variables (`S`, `browserLockPass`, `browserLockKey`, `browserLockSalt`), and supports unlocking via passphrase or **2-of-3 Recovery Cards (`FFG-1-...`)** (both in-browser lock and standalone `.html` backups).
 2. **Android:**
    - Stores data in internal `filesDir` with **`AndroidKeyStore`-backed encryption**, sets **`FLAG_SECURE`** to block screenshots and OS task-switcher previews, and supports **`BiometricPrompt`** lock.
-   - **Release signing behavior:** CI signs `Our-Family-Field-Guide-Android.apk` with `assembleRelease` only when release keystore secrets (`ANDROID_KEYSTORE_BASE64`, etc.) are configured; otherwise CI builds and labels `Our-Family-Field-Guide-Android-PREVIEW-debug.apk` so debug builds are never mistaken for production upgrade-compatible releases.
+   - **Release signing behavior:** CI signs `Our-Family-Field-Guide-Android.apk` with `assembleRelease` only when release keystore secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) are configured; otherwise CI builds and labels `Our-Family-Field-Guide-Android-PREVIEW-debug.apk` so debug builds are never mistaken for production upgrade-compatible releases.
 3. **Apple (macOS & iOS):**
    - Stores data in `Application Support/FamilyFieldGuide` (`isExcludedFromBackup = true`), protects encryption keys via **Apple Keychain**, authenticates with Touch ID / Face ID / device passcode (`LocalAuthentication`), and automatically **re-locks on background**.
 4. **Windows & Linux:**
