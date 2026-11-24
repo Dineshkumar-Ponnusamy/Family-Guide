@@ -1,0 +1,49 @@
+name: Build Windows App (C# + .NET 8 + WPF)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "native/windows/**"
+      - "shared/guide-data.json"
+      - ".github/workflows/windows.yml"
+  pull_request:
+    paths:
+      - "native/windows/**"
+      - "shared/guide-data.json"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Setup Node.js (for schema sync)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python & sync shared schema JSON
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python shared/sync_schema.py
+
+      - name: Run C# Core xUnit tests
+        run: dotnet test native/windows/FamilyGuide.Core.Tests/FamilyGuide.Core.Tests.csproj -c Release
+
+      - name: Publish self-contained single-file Windows .exe
+        run: dotnet publish native/windows/FamilyGuide.Windows/FamilyGuide.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o native/windows/publish
+
+      - name: Upload Windows .exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-field-guide-windows-x64
+          path: native/windows/publish/FamilyFieldGuide.exe

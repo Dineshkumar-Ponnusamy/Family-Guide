@@ -1,0 +1,16 @@
+<Application x:Class="FamilyGuide.Windows.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="PaperBrush" Color="#F6F1E6" />
+        <SolidColorBrush x:Key="Paper2Brush" Color="#EFE7D6" />
+        <SolidColorBrush x:Key="CardBrush" Color="#FFFDF8" />
+        <SolidColorBrush x:Key="InkBrush" Color="#1F3A2E" />
+        <SolidColorBrush x:Key="Ink2Brush" Color="#4B5F55" />
+        <SolidColorBrush x:Key="RuleBrush" Color="#D9CFB9" />
+        <SolidColorBrush x:Key="TomatoBrush" Color="#D2512F" />
+        <SolidColorBrush x:Key="SkyBrush" Color="#4F7C8A" />
+        <SolidColorBrush x:Key="WarnBgBrush" Color="#FBF3DF" />
+    </Application.Resources>
+</Application>

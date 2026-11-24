@@ -95,6 +95,7 @@ Use **Save backup → Standalone locked HTML (.html)**, store the file in two sa
 | `desktop/` & `.github/workflows/` | Optional Tauri v2 desktop app wrapper (Mac/Windows/Linux) & CI/Release workflows |
 | `shared/` & `native/apple/` | Shared data/crypto interop spec + pure native SwiftUI apps for macOS & iOS |
 | `native/android/` | Pure native Kotlin + Jetpack Compose Android app (zero `INTERNET` permission) |
+| `native/windows/` | Pure native C# + .NET 8 WPF Windows desktop app |
 | `SECURITY.md` | Threat model, cryptographic details & safe-use rules |
 | `CONTRIBUTING.md` | How to extend sections or add your country preset |
 
