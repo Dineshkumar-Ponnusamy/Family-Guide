@@ -10,6 +10,7 @@ name = "family-field-guide"
 path = "src/main.rs"
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 family-guide-core = { path = "../core" }
 gtk4 = { version = "0.9", features = ["v4_12"] }
 serde_json = "1"

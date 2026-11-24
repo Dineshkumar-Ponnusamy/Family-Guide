@@ -10,13 +10,15 @@ final class FamilyGuideCoreTests: XCTestCase {
     }
 
     func testSchemaAndRegionsDecodeCleanly() throws {
+        let url = GuideStore.locateGuideDataURL()
+        XCTAssertNotNil(url)
         let store = try GuideStore(storageDirectory: makeTempDir())
         XCTAssertEqual(store.data.TABS.count, 6)
         XCTAssertEqual(store.data.PLAYBOOK.count, 7)
         XCTAssertEqual(store.data.MONEY_GUIDE.count, 6)
         XCTAssertEqual(store.data.PRO_FINDER.count, 5)
         XCTAssertEqual(store.data.REGIONS.count, 9)
-        XCTAssertEqual(store.data.DICE_WORDS.count, 256)
+        XCTAssertEqual(store.data.DICE_WORDS.count, 2048)
         XCTAssertNotNil(store.data.REGIONS["us_in"]?.moneyGuide)
         XCTAssertNotNil(store.data.REGIONS["in"]?.proFinder)
     }
@@ -138,5 +140,72 @@ final class FamilyGuideCoreTests: XCTestCase {
         XCTAssertTrue(reloaded.state.readMode)
         XCTAssertTrue(reloaded.state.largeText)
         XCTAssertTrue(reloaded.state.highContrast)
+    }
+
+    func testPassphraseDefaultSixWordsAndCorruptStatePreserved() throws {
+        let dir = try makeTempDir()
+        let store = try GuideStore(storageDirectory: dir)
+        let pw = CryptoEngine.generatePassphrase(words: store.data.DICE_WORDS)
+        XCTAssertEqual(pw.split(separator: "-").count, 6)
+
+        let stateURL = dir.appendingPathComponent("state.json")
+        try Data("{corrupt json".utf8).write(to: stateURL)
+        let recovered = try GuideStore(storageDirectory: dir)
+        XCTAssertEqual(recovered.state.tab, "start")
+        let corruptBackupURL = dir.appendingPathComponent("state.json.corrupt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: corruptBackupURL.path))
+    }
+
+    func testApplyMergePhotosFireDrillAndTimestamps() throws {
+        let store = try GuideStore(storageDirectory: makeTempDir())
+        store.state.fireDrill = ["fd1": true, "fd2": false]
+        store.state.lastDryRun = "2025-01-01T00:00:00Z"
+        store.state.reviewed = "2025-03-01T00:00:00Z"
+        store.state.photos = [
+            PhotoSnippet(id: "p0", label: "Existing", dataUrl: "data:image/png;base64,AAAA")
+        ]
+
+        var inc = GuideState()
+        inc.fireDrill = ["fd1": false, "fd2": true, "fd3": true]
+        inc.lastDryRun = "2025-02-01T00:00:00Z"
+        inc.reviewed = "2025-02-01T00:00:00Z"
+        inc.photos = [
+            PhotoSnippet(id: "bad", label: "XSS", dataUrl: "javascript:alert(1)"),
+            PhotoSnippet(id: "dup", label: "Existing", dataUrl: "data:image/png;base64,AAAA")
+        ]
+        for i in 1...12 {
+            inc.photos.append(PhotoSnippet(id: "p\(i)", label: "Doc \(i)", dataUrl: "data:image/jpeg;base64,BBBB\(i)"))
+        }
+
+        let summary = store.applyMerge(incoming: inc, overwriteConflicts: false)
+        XCTAssertTrue(summary.contains("+9 photos"))
+        XCTAssertEqual(store.state.photos.count, 10)
+        XCTAssertFalse(store.state.photos.contains(where: { $0.dataUrl.hasPrefix("javascript:") }))
+        XCTAssertEqual(store.state.fireDrill["fd1"], true)
+        XCTAssertEqual(store.state.fireDrill["fd2"], true)
+        XCTAssertEqual(store.state.fireDrill["fd3"], true)
+        XCTAssertEqual(store.state.lastDryRun, "2025-02-01T00:00:00Z")
+        XCTAssertEqual(store.state.reviewed, "2025-03-01T00:00:00Z")
+    }
+
+    func testFullStatePrivacyAuditWithoutLetterFalsePositives() throws {
+        let store = try GuideStore(storageDirectory: makeTempDir())
+        store.state.f["letter"] = "I love you very much every single day and hope this keeps everyone safe always"
+        var audit = store.computeAudit()
+        XCTAssertNil(audit.first(where: { $0.id == "crypto_safety" }))
+        XCTAssertNil(audit.first(where: { $0.id == "gov_id_privacy" }))
+
+        store.state.f["d_pm"] = "Vault PIN and SSN 123-45-6789"
+        store.state.f["d_2fa"] = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima"
+        audit = store.computeAudit()
+        XCTAssertEqual(audit.first(where: { $0.id == "gov_id_privacy" })?.sev, .high)
+        XCTAssertEqual(audit.first(where: { $0.id == "crypto_safety" })?.sev, .high)
+
+        store.state.f["d_pm"] = "1Password emergency kit in fireproof safe"
+        store.state.f["d_2fa"] = "Hardware YubiKey in safe"
+        store.state.lists["gov_ids"] = [["who": "Me", "idtype": "SSN", "last4": "123456789", "where": "Safe"]]
+        audit = store.computeAudit()
+        XCTAssertEqual(audit.first(where: { $0.id == "gov_id_privacy" })?.sev, .high)
+        XCTAssertNil(audit.first(where: { $0.id == "crypto_safety" }))
     }
 }

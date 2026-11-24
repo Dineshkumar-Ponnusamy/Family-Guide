@@ -284,7 +284,7 @@ pub fn show_audit_dialog(parent: &impl IsA<Window>, store: SharedStore, on_refre
                 let total_drill = st.data.FIRE_DRILL.len();
                 let done = st.state.fire_drill.values().filter(|v| **v).count();
                 if total_drill > 0 && done >= total_drill {
-                    st.state.last_dry_run = Some("completed".to_string());
+                    st.state.last_dry_run = Some(chrono::Utc::now().to_rfc3339());
                 }
                 st.save(true);
             }
@@ -322,20 +322,29 @@ pub fn show_save_backup_dialog(parent: &impl IsA<Window>, store: SharedStore, on
     root.append(&info);
 
     let pass_row = GtkBox::new(Orientation::Horizontal, 8);
-    let pass_entry = Entry::builder()
-        .placeholder_text("Enter passphrase or generate 5-word Diceware passphrase...")
+    let pass_entry = PasswordEntry::builder()
+        .placeholder_text("Enter passphrase or generate 6-word Diceware passphrase...")
+        .show_peek_icon(true)
         .hexpand(true)
         .build();
-    let gen_btn = Button::with_label("Generate 5-word Diceware");
+    let confirm_entry = PasswordEntry::builder()
+        .placeholder_text("Confirm backup passphrase...")
+        .show_peek_icon(true)
+        .hexpand(true)
+        .build();
+    let gen_btn = Button::with_label("Generate 6-word Diceware");
     let store_g = store.clone();
     let pass_g = pass_entry.clone();
+    let confirm_g = confirm_entry.clone();
     gen_btn.connect_clicked(move |_| {
-        let phrase = generate_passphrase(&store_g.borrow().data.DICE_WORDS, 5);
+        let phrase = generate_passphrase(&store_g.borrow().data.DICE_WORDS, 6);
         pass_g.set_text(&phrase);
+        confirm_g.set_text(&phrase);
     });
     pass_row.append(&pass_entry);
     pass_row.append(&gen_btn);
     root.append(&pass_row);
+    root.append(&confirm_entry);
 
     let shamir_btn = Button::with_label("Split into 2-of-3 Shamir Recovery Cards");
     shamir_btn.set_halign(Align::Start);
@@ -395,12 +404,18 @@ pub fn show_save_backup_dialog(parent: &impl IsA<Window>, store: SharedStore, on
     let win_s = win.clone();
     let store_s = store.clone();
     let pass_s = pass_entry.clone();
+    let confirm_s = confirm_entry.clone();
     let status_s = status.clone();
     let on_refresh_s = on_refresh.clone();
     save_btn.connect_clicked(move |_| {
         let phrase = pass_s.text().to_string();
+        let confirm = confirm_s.text().to_string();
         if phrase.trim().len() < 8 {
             status_s.set_text("Use at least 8 characters for the backup passphrase.");
+            return;
+        }
+        if phrase.trim() != confirm.trim() {
+            status_s.set_text("Backup passphrases do not match.");
             return;
         }
         let pkg = {
@@ -435,7 +450,7 @@ pub fn show_save_backup_dialog(parent: &impl IsA<Window>, store: SharedStore, on
                         Ok(_) => {
                             {
                                 let mut st = store_w.borrow_mut();
-                                st.state.last_backup = Some("saved".to_string());
+                                st.state.last_backup = Some(chrono::Utc::now().to_rfc3339());
                                 st.save(false);
                             }
                             on_refresh_w();

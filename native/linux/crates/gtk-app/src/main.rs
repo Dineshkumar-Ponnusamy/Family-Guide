@@ -49,7 +49,6 @@ fn build_ui(app: &Application) {
         }),
     ));
     let is_syncing = Rc::new(Cell::new(false));
-    let session_lock_pass: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
 
     let win = ApplicationWindow::builder()
         .application(app)
@@ -180,10 +179,10 @@ fn build_ui(app: &Application) {
     lock_logo.set_halign(Align::Center);
     let lock_title = Label::new(Some("Our Family Field Guide is Locked"));
     lock_title.add_css_class("ffg-title");
-    let lock_sub = Label::new(Some("Enter your session lock passphrase to continue."));
+    let lock_sub = Label::new(Some("Enter your local lock passphrase to decrypt and continue."));
     lock_sub.add_css_class("ffg-muted");
     let lock_pass_entry = PasswordEntry::builder()
-        .placeholder_text("Session passphrase")
+        .placeholder_text("Local lock passphrase")
         .show_peek_icon(true)
         .build();
     let lock_err_lbl = Label::new(None);
@@ -250,10 +249,16 @@ fn build_ui(app: &Application) {
             is_syncing.set(false);
 
             // Clear & rebuild sidebar tabs
-            while let Some(c) = nav_box.first_child() {
-                nav_box.remove(&c);
-            }
-            let (core_tabs, custom_tabs, active_tab, read_mode, is_demo) = {
+            clear_box(&nav_box);
+            let (
+                core_tabs,
+                custom_tabs,
+                active_tab,
+                read_mode,
+                is_demo,
+                has_any_content,
+                dismiss_demo,
+            ) = {
                 let st = store.borrow();
                 (
                     st.data.TABS.clone(),
@@ -261,6 +266,8 @@ fn build_ui(app: &Application) {
                     st.state.tab.clone(),
                     st.state.read_mode,
                     st.state.is_demo,
+                    st.has_any_content(),
+                    st.state.dismiss_demo,
                 )
             };
 
@@ -304,9 +311,7 @@ fn build_ui(app: &Application) {
             }
 
             // Clear & rebuild right pane
-            while let Some(c) = content_box.first_child() {
-                content_box.remove(&c);
-            }
+            clear_box(&content_box);
 
             // Read Mode calm banner (matches Web / Apple / Android / Windows)
             if read_mode {
@@ -335,41 +340,57 @@ fn build_ui(app: &Application) {
             }
 
             // Demo banner
-            let demo_banner = GtkBox::new(Orientation::Horizontal, 8);
-            demo_banner.add_css_class(if is_demo {
-                "ffg-banner-demo-active"
-            } else {
-                "ffg-banner-demo"
-            });
-            let demo_lbl = Label::new(Some(if is_demo {
-                "Sample family preview — explore freely, or clear to start your own guide."
-            } else {
-                "New here? Preview how a filled guide looks (US + India H-1B or Standard)."
-            }));
-            demo_lbl.set_hexpand(true);
-            demo_lbl.set_wrap(true);
-            demo_lbl.set_halign(Align::Start);
-            let demo_btn = Button::with_label(if is_demo {
-                "Clear sample & start my guide"
-            } else {
-                "Load sample family"
-            });
-            let store_dm = store.clone();
-            let trig_dm = trigger_refresh.clone();
-            demo_btn.connect_clicked(move |_| {
-                {
-                    let mut st = store_dm.borrow_mut();
-                    if st.state.is_demo {
-                        st.clear_demo();
-                    } else {
-                        st.load_demo(false);
+            if is_demo || (!has_any_content && !read_mode && !dismiss_demo) {
+                let demo_banner = GtkBox::new(Orientation::Horizontal, 8);
+                demo_banner.add_css_class(if is_demo {
+                    "ffg-banner-demo-active"
+                } else {
+                    "ffg-banner-demo"
+                });
+                let demo_lbl = Label::new(Some(if is_demo {
+                    "Sample family preview — explore freely, or clear to start your own guide."
+                } else {
+                    "New here? Preview how a filled guide looks (US + India H-1B or Standard)."
+                }));
+                demo_lbl.set_hexpand(true);
+                demo_lbl.set_wrap(true);
+                demo_lbl.set_halign(Align::Start);
+                let demo_btn = Button::with_label(if is_demo {
+                    "Clear sample & start my guide"
+                } else {
+                    "Load sample family"
+                });
+                let store_dm = store.clone();
+                let trig_dm = trigger_refresh.clone();
+                demo_btn.connect_clicked(move |_| {
+                    {
+                        let mut st = store_dm.borrow_mut();
+                        if st.state.is_demo {
+                            st.clear_demo();
+                        } else {
+                            st.load_demo(false);
+                        }
                     }
+                    trig_dm();
+                });
+                demo_banner.append(&demo_lbl);
+                demo_banner.append(&demo_btn);
+                if !is_demo {
+                    let dismiss_btn = Button::with_label("Dismiss");
+                    let store_dis = store.clone();
+                    let trig_dis = trigger_refresh.clone();
+                    dismiss_btn.connect_clicked(move |_| {
+                        {
+                            let mut st = store_dis.borrow_mut();
+                            st.state.dismiss_demo = true;
+                            st.save(false);
+                        }
+                        trig_dis();
+                    });
+                    demo_banner.append(&dismiss_btn);
                 }
-                trig_dm();
-            });
-            demo_banner.append(&demo_lbl);
-            demo_banner.append(&demo_btn);
-            content_box.append(&demo_banner);
+                content_box.append(&demo_banner);
+            }
 
             // Render active core tab OR custom tab
             if let Some(tab) = core_tabs.iter().find(|t| t.id == active_tab) {
@@ -398,11 +419,26 @@ fn build_ui(app: &Application) {
                 if !read_mode {
                     let del_btn = Button::with_label("Delete Section");
                     let tid_del = ct.id.clone();
+                    let title_del = ct.title.clone();
                     let store_del = store.clone();
                     let trig_del = trigger_refresh.clone();
-                    del_btn.connect_clicked(move |_| {
-                        store_del.borrow_mut().delete_custom_section(&tid_del);
-                        trig_del();
+                    del_btn.connect_clicked(move |btn| {
+                        let parent_win = btn.root().and_then(|r| r.downcast::<Window>().ok());
+                        let tid_c = tid_del.clone();
+                        let store_c = store_del.clone();
+                        let trig_c = trig_del.clone();
+                        show_confirm_dialog(
+                            parent_win.as_ref(),
+                            "Delete Custom Section?",
+                            &format!(
+                                "Delete \"{title_del}\" and all entries inside it? This cannot be undone."
+                            ),
+                            "Delete Section",
+                            move || {
+                                store_c.borrow_mut().delete_custom_section(&tid_c);
+                                trig_c();
+                            },
+                        );
                     });
                     top_row.append(&del_btn);
                 }
@@ -412,8 +448,40 @@ fn build_ui(app: &Application) {
         })
     };
 
+    let set_locked_ui: Rc<dyn Fn(bool)> = {
+        let content_box = content_box.clone();
+        let nav_box = nav_box.clone();
+        let paned = paned.clone();
+        let lock_box = lock_box.clone();
+        let region_dd = region_dd.clone();
+        let read_toggle = read_toggle.clone();
+        let large_toggle = large_toggle.clone();
+        let contrast_toggle = contrast_toggle.clone();
+        let search_btn = search_btn.clone();
+        let lock_btn = lock_btn.clone();
+        Rc::new(move |locked: bool| {
+            if locked {
+                clear_box(&content_box);
+                clear_box(&nav_box);
+            }
+            paned.set_visible(!locked);
+            lock_box.set_visible(locked);
+            region_dd.set_sensitive(!locked);
+            read_toggle.set_sensitive(!locked);
+            large_toggle.set_sensitive(!locked);
+            contrast_toggle.set_sensitive(!locked);
+            search_btn.set_sensitive(!locked);
+            lock_btn.set_sensitive(!locked);
+        })
+    };
+
     *refresh_slot.borrow_mut() = Some(render_fn.clone());
-    render_fn();
+    if store.borrow().is_locked_on_disk() {
+        set_locked_ui(true);
+    } else {
+        set_locked_ui(false);
+        render_fn();
+    }
 
     // Wire HeaderBar controls
     {
@@ -500,85 +568,175 @@ fn build_ui(app: &Application) {
 
     {
         let win_l = win.clone();
-        let lock_box_c = lock_box.clone();
-        let paned_c = paned.clone();
-        let pass_store = session_lock_pass.clone();
+        let store_l = store.clone();
+        let set_locked_l = set_locked_ui.clone();
+        let trig_l = trigger_refresh.clone();
         let entry_clear = lock_pass_entry.clone();
         let err_clear = lock_err_lbl.clone();
         lock_btn.connect_clicked(move |_| {
             let modal = Window::builder()
                 .transient_for(&win_l)
                 .modal(true)
-                .title("Lock Session")
-                .default_width(380)
-                .default_height(170)
+                .title("Local Lock")
+                .default_width(410)
+                .default_height(210)
                 .build();
             let vbox = GtkBox::new(Orientation::Vertical, 10);
             vbox.set_margin_top(14);
             vbox.set_margin_bottom(14);
             vbox.set_margin_start(14);
             vbox.set_margin_end(14);
-            let lbl = Label::new(Some("Set a quick passphrase to lock this window:"));
-            lbl.set_halign(Align::Start);
-            let pw_in = PasswordEntry::builder()
-                .placeholder_text("Session passphrase")
-                .show_peek_icon(true)
-                .build();
-            let msg_lbl = Label::new(None);
-            msg_lbl.add_css_class("ffg-eyebrow");
-            let go_btn = Button::with_label("Lock");
-            go_btn.add_css_class("suggested-action");
-            go_btn.set_halign(Align::End);
-            vbox.append(&lbl);
-            vbox.append(&pw_in);
-            vbox.append(&msg_lbl);
-            vbox.append(&go_btn);
-            modal.set_child(Some(&vbox));
 
-            let modal_c = modal.clone();
-            let lock_box_w = lock_box_c.clone();
-            let paned_w = paned_c.clone();
-            let pass_w = pass_store.clone();
-            let entry_w = entry_clear.clone();
-            let err_w = err_clear.clone();
-            go_btn.connect_clicked(move |_| {
-                let pw = pw_in.text().to_string();
-                if pw.is_empty() {
-                    msg_lbl.set_text("Enter a passphrase to lock.");
-                    return;
-                }
-                *pass_w.borrow_mut() = Some(pw);
-                entry_w.set_text("");
-                err_w.set_text("");
-                paned_w.set_visible(false);
-                lock_box_w.set_visible(true);
-                modal_c.close();
-            });
+            let has_lock = store_l.borrow().active_lock_pass.is_some();
+            if has_lock {
+                let lbl = Label::new(Some(
+                    "Persistent encrypted local lock is active (state.locked.json). Lock this window now, or turn off local lock?",
+                ));
+                lbl.set_wrap(true);
+                lbl.set_halign(Align::Start);
+                let msg_lbl = Label::new(None);
+                msg_lbl.add_css_class("ffg-eyebrow");
+                msg_lbl.set_halign(Align::Start);
+
+                let btn_row = GtkBox::new(Orientation::Horizontal, 8);
+                btn_row.set_halign(Align::End);
+                let cancel_btn = Button::with_label("Cancel");
+                let disable_btn = Button::with_label("Turn Off Local Lock");
+                let lock_now_btn = Button::with_label("Lock Now");
+                lock_now_btn.add_css_class("suggested-action");
+
+                let modal_c = modal.clone();
+                cancel_btn.connect_clicked(move |_| modal_c.close());
+
+                let store_d = store_l.clone();
+                let msg_d = msg_lbl.clone();
+                let trig_d = trig_l.clone();
+                let modal_d = modal.clone();
+                disable_btn.connect_clicked(move |_| {
+                    let res = store_d.borrow_mut().disable_local_lock();
+                    match res {
+                        Ok(()) => {
+                            trig_d();
+                            modal_d.close();
+                        }
+                        Err(e) => msg_d.set_text(&e),
+                    }
+                });
+
+                let store_n = store_l.clone();
+                let set_locked_n = set_locked_l.clone();
+                let entry_n = entry_clear.clone();
+                let err_n = err_clear.clone();
+                let modal_n = modal.clone();
+                lock_now_btn.connect_clicked(move |_| {
+                    store_n.borrow_mut().lock_now();
+                    entry_n.set_text("");
+                    err_n.set_text("");
+                    set_locked_n(true);
+                    modal_n.close();
+                });
+
+                btn_row.append(&cancel_btn);
+                btn_row.append(&disable_btn);
+                btn_row.append(&lock_now_btn);
+                vbox.append(&lbl);
+                vbox.append(&msg_lbl);
+                vbox.append(&btn_row);
+            } else {
+                let lbl = Label::new(Some(
+                    "Set a passphrase (min 8 chars) to encrypt local data (state.locked.json) and lock this window:",
+                ));
+                lbl.set_wrap(true);
+                lbl.set_halign(Align::Start);
+                let pw_in = PasswordEntry::builder()
+                    .placeholder_text("Local lock passphrase (min 8 chars)")
+                    .show_peek_icon(true)
+                    .build();
+                let pw_confirm = PasswordEntry::builder()
+                    .placeholder_text("Confirm passphrase")
+                    .show_peek_icon(true)
+                    .build();
+                let msg_lbl = Label::new(None);
+                msg_lbl.add_css_class("ffg-eyebrow");
+                msg_lbl.set_halign(Align::Start);
+
+                let btn_row = GtkBox::new(Orientation::Horizontal, 8);
+                btn_row.set_halign(Align::End);
+                let cancel_btn = Button::with_label("Cancel");
+                let go_btn = Button::with_label("Enable Lock & Lock Now");
+                go_btn.add_css_class("suggested-action");
+
+                let modal_c = modal.clone();
+                cancel_btn.connect_clicked(move |_| modal_c.close());
+
+                let modal_w = modal.clone();
+                let store_w = store_l.clone();
+                let set_locked_w = set_locked_l.clone();
+                let entry_w = entry_clear.clone();
+                let err_w = err_clear.clone();
+                go_btn.connect_clicked(move |_| {
+                    let pw = pw_in.text().to_string();
+                    let confirm = pw_confirm.text().to_string();
+                    if pw.trim().len() < 8 {
+                        msg_lbl.set_text("Use at least 8 characters for the local lock passphrase.");
+                        return;
+                    }
+                    if pw != confirm {
+                        msg_lbl.set_text("Passphrases do not match.");
+                        return;
+                    }
+                    let res = store_w.borrow_mut().enable_local_lock(&pw);
+                    match res {
+                        Ok(()) => {
+                            store_w.borrow_mut().lock_now();
+                            entry_w.set_text("");
+                            err_w.set_text("");
+                            set_locked_w(true);
+                            modal_w.close();
+                        }
+                        Err(e) => msg_lbl.set_text(&e),
+                    }
+                });
+
+                btn_row.append(&cancel_btn);
+                btn_row.append(&go_btn);
+                vbox.append(&lbl);
+                vbox.append(&pw_in);
+                vbox.append(&pw_confirm);
+                vbox.append(&msg_lbl);
+                vbox.append(&btn_row);
+            }
+
+            modal.set_child(Some(&vbox));
             modal.present();
         });
     }
 
     {
-        let lock_box_c = lock_box.clone();
-        let paned_c = paned.clone();
-        let pass_store = session_lock_pass.clone();
+        let store_u = store.clone();
+        let set_locked_u = set_locked_ui.clone();
+        let trig_u = trigger_refresh.clone();
         let entry_u = lock_pass_entry.clone();
         let err_u = lock_err_lbl.clone();
-        unlock_btn.connect_clicked(move |_| {
+        let do_unlock: Rc<dyn Fn()> = Rc::new(move || {
             let entered = entry_u.text().to_string();
-            let matches = pass_store
-                .borrow()
-                .as_deref()
-                .is_some_and(|expected| expected == entered);
-            if matches {
-                entry_u.set_text("");
-                err_u.set_text("");
-                lock_box_c.set_visible(false);
-                paned_c.set_visible(true);
-            } else {
-                err_u.set_text("Wrong passphrase.");
+            let res = store_u.borrow_mut().unlock_local_lock(&entered);
+            match res {
+                Ok(()) => {
+                    entry_u.set_text("");
+                    err_u.set_text("");
+                    set_locked_u(false);
+                    trig_u();
+                }
+                Err(e) => {
+                    err_u.set_text(&e);
+                }
             }
         });
+        let do_unlock_btn = do_unlock.clone();
+        unlock_btn.connect_clicked(move |_| do_unlock_btn());
+        let do_unlock_act = do_unlock;
+        lock_pass_entry.connect_activate(move |_| do_unlock_act());
     }
 
     // Wire Sidebar action buttons
@@ -647,6 +805,61 @@ fn build_ui(app: &Application) {
     }
 
     win.present();
+}
+
+fn clear_box(b: &GtkBox) {
+    while let Some(c) = b.first_child() {
+        b.remove(&c);
+    }
+}
+
+fn show_confirm_dialog<F: Fn() + 'static>(
+    parent: Option<&Window>,
+    title: &str,
+    message: &str,
+    confirm_label: &str,
+    on_confirm: F,
+) {
+    let mut builder = Window::builder()
+        .modal(true)
+        .title(title)
+        .default_width(380)
+        .default_height(150);
+    if let Some(p) = parent {
+        builder = builder.transient_for(p);
+    }
+    let modal = builder.build();
+
+    let vbox = GtkBox::new(Orientation::Vertical, 12);
+    vbox.set_margin_top(14);
+    vbox.set_margin_bottom(14);
+    vbox.set_margin_start(14);
+    vbox.set_margin_end(14);
+
+    let lbl = Label::new(Some(message));
+    lbl.set_wrap(true);
+    lbl.set_halign(Align::Start);
+
+    let btn_row = GtkBox::new(Orientation::Horizontal, 8);
+    btn_row.set_halign(Align::End);
+    let cancel_btn = Button::with_label("Cancel");
+    let confirm_btn = Button::with_label(confirm_label);
+    confirm_btn.add_css_class("destructive-action");
+
+    let modal_c = modal.clone();
+    cancel_btn.connect_clicked(move |_| modal_c.close());
+    let modal_ok = modal.clone();
+    confirm_btn.connect_clicked(move |_| {
+        on_confirm();
+        modal_ok.close();
+    });
+
+    btn_row.append(&cancel_btn);
+    btn_row.append(&confirm_btn);
+    vbox.append(&lbl);
+    vbox.append(&btn_row);
+    modal.set_child(Some(&vbox));
+    modal.present();
 }
 
 fn render_block(
@@ -1182,20 +1395,46 @@ fn render_list_block(
             let store_d = store.clone();
             let bid_d = bid.to_string();
             let trig_d = trigger_refresh.clone();
-            del.connect_clicked(move |_| {
-                {
-                    let mut st = store_d.borrow_mut();
-                    if let Some(list) = st.state.lists.get_mut(&bid_d) {
-                        if r_idx < list.len() {
-                            list.remove(r_idx);
+            del.connect_clicked(move |btn| {
+                let is_filled = store_d
+                    .borrow()
+                    .state
+                    .lists
+                    .get(&bid_d)
+                    .and_then(|list| list.get(r_idx))
+                    .is_some_and(|row| row.values().any(|v| !v.trim().is_empty()));
+                let remove_row = {
+                    let store_r = store_d.clone();
+                    let bid_r = bid_d.clone();
+                    let trig_r = trig_d.clone();
+                    move || {
+                        {
+                            let mut st = store_r.borrow_mut();
+                            if let Some(list) = st.state.lists.get_mut(&bid_r) {
+                                if r_idx < list.len() {
+                                    list.remove(r_idx);
+                                }
+                                if list.is_empty() {
+                                    list.push(HashMap::new());
+                                }
+                            }
+                            st.save(true);
                         }
-                        if list.is_empty() {
-                            list.push(HashMap::new());
-                        }
+                        trig_r();
                     }
-                    st.save(true);
+                };
+                if is_filled {
+                    let parent_win = btn.root().and_then(|r| r.downcast::<Window>().ok());
+                    show_confirm_dialog(
+                        parent_win.as_ref(),
+                        "Delete Row?",
+                        "Delete this filled row? This cannot be undone.",
+                        "Delete Row",
+                        remove_row,
+                    );
+                } else {
+                    remove_row();
                 }
-                trig_d();
             });
             row_box.append(&del);
         }
@@ -1284,7 +1523,45 @@ fn render_extras_for_tab(
     parent.append(&card);
 }
 
+fn run_smoke_test() -> Result<(), String> {
+    let mut store = GuideStore::new_in_memory()?;
+    if store.data.TABS.len() != 6 || store.data.REGIONS.len() != 9 || store.data.PLAYBOOK.len() != 7 {
+        return Err("Unexpected schema counts".to_string());
+    }
+    store.load_demo(false);
+    if store.compute_audit().is_empty() {
+        return Err("Readiness audit was empty".to_string());
+    }
+    let pw = "amber-cedar-lantern-orbit-river";
+    let pkg = family_guide_core::crypto::encrypt_state(&store.state, pw)?;
+    let decoded = family_guide_core::crypto::decrypt_state(&pkg, pw)?;
+    if !decoded.is_demo {
+        return Err("Decrypted demo flag mismatch".to_string());
+    }
+    let v1 = "FFG-1-39F9-5E0D-03F8-66D0-86D0-D9C2-0FA9-4188-E876-6689-C6CF-BF9E-BAB4-368E-BEAC-AF";
+    let v2 = "FFG-2-D15E-1AB5-909C-6914-BB18-3FE8-AAEA-3097-647A-7E7E-2613-C39C-F304-FABC-FDEC-D3";
+    if family_guide_core::crypto::sss_combine_2of3(v1, v2)? != pw {
+        return Err("Shamir 2-of-3 cross-platform vector mismatch".to_string());
+    }
+    if store.export_executive_summary_text().trim().is_empty() {
+        return Err("Executive summary was empty".to_string());
+    }
+    Ok(())
+}
+
 fn main() {
+    if std::env::args().any(|a| a == "--smoke-test") {
+        match run_smoke_test() {
+            Ok(()) => {
+                println!("LINUX_APP_SMOKE_TEST_PASSED");
+                return;
+            }
+            Err(e) => {
+                eprintln!("LINUX_APP_SMOKE_TEST_FAILED: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
     let app = Application::builder().application_id(APP_ID).build();
     app.connect_activate(build_ui);
     app.run();

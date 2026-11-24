@@ -74,7 +74,7 @@ object CryptoEngine {
         return pkg
     }
 
-    fun generatePassphrase(wordCount: Int = 5, words: List<String>): String {
+    fun generatePassphrase(wordCount: Int = 6, words: List<String>): String {
         val pool = if (words.isEmpty()) listOf("maple", "river", "lantern", "cedar", "orbit") else words
         return (0 until wordCount).joinToString("-") { pool[rng.nextInt(pool.size)] }
     }

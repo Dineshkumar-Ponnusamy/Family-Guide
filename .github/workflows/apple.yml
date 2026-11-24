@@ -6,6 +6,7 @@ on:
     paths:
       - "native/apple/**"
       - "shared/guide-data.json"
+      - "shared/sync_schema.py"
       - ".github/workflows/apple.yml"
   pull_request:
     paths:
@@ -20,11 +21,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js (for schema sync)
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
       - name: Setup Python & sync shared schema JSON
         uses: actions/setup-python@v5
         with:
@@ -34,5 +30,32 @@ jobs:
       - name: Run Swift Core & UI tests
         run: swift test --package-path native/apple
 
-      - name: Build macOS executable
-        run: swift build --package-path native/apple --product FamilyGuideMac -c release
+      - name: Build & verify packaged macOS .app bundle + iOS Simulator compile
+        run: |
+          swift build --package-path native/apple --product FamilyGuideMac -c release
+          BIN_DIR=$(swift build --package-path native/apple --product FamilyGuideMac -c release --show-bin-path)
+          APP_DIR="/tmp/ffg-ci-app/Our Family Field Guide.app"
+          rm -rf /tmp/ffg-ci-app
+          mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
+          cp "$BIN_DIR/FamilyGuideMac" "$APP_DIR/Contents/MacOS/FamilyGuideMac"
+          cp -R "$BIN_DIR/FamilyFieldGuide_FamilyGuideCore.bundle" "$APP_DIR/Contents/Resources/"
+          cp native/apple/Sources/FamilyGuideCore/Resources/guide-data.json "$APP_DIR/Contents/Resources/guide-data.json"
+          cat > "$APP_DIR/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>Our Family Field Guide</string>
+            <key>CFBundleIdentifier</key><string>io.github.dineshkumarponnusamy.familyfieldguide</string>
+            <key>CFBundleExecutable</key><string>FamilyGuideMac</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>NSPrincipalClass</key><string>NSApplication</string>
+          </dict>
+          </plist>
+          PLIST
+          codesign --force --deep --sign - "$APP_DIR"
+          SMOKE_OUT="$("$APP_DIR/Contents/MacOS/FamilyGuideMac" --smoke-test)"
+          echo "$SMOKE_OUT"
+          echo "$SMOKE_OUT" | grep -q "MAC_APP_SMOKE_TEST_PASSED"
+          rm -rf /tmp/ffg-ci-app
+          (cd native/apple && xcodebuild -scheme FamilyGuideUI -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build)

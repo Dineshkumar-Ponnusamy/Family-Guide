@@ -10,7 +10,6 @@ namespace FamilyGuide.Windows;
 public partial class MainWindow : Window
 {
     private readonly GuideStore _store = new();
-    private string? _sessionLockPassphrase;
     private bool _suppressNavEvents;
 
     private static readonly string[] RegionOrder = { "us", "us_in", "in", "visa_intl", "uk", "ca", "au", "eu", "generic" };
@@ -24,10 +23,29 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        LockPassBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) OnUnlockAttempt(this, e); };
         BuildRegionList();
         ApplyThemeAppearance();
-        RebuildSidebar();
-        RenderActiveTab();
+        if (_store.IsLockedOnDisk)
+        {
+            EnterLockedUiState();
+        }
+        else
+        {
+            RebuildSidebar();
+            RenderActiveTab();
+        }
+    }
+
+    private void EnterLockedUiState()
+    {
+        ContentHost.Children.Clear();
+        TabList.Items.Clear();
+        PctText.Text = "Locked";
+        PctBar.Value = 0;
+        LockPassBox.Password = "";
+        LockErrText.Text = "";
+        LockOverlay.Visibility = Visibility.Visible;
     }
 
     private void ApplyThemeAppearance()
@@ -127,10 +145,23 @@ public partial class MainWindow : Window
                 {
                     Content = "Delete section",
                     Padding = new Thickness(10, 4, 10, 4),
-                    Foreground = Br("TomatoBrush")
+                    Foreground = Br("TomatoInkBrush")
                 };
                 string delId = ct.id;
-                delBtn.Click += (_, _) => { _store.DeleteCustomSection(delId); RebuildSidebar(); RenderActiveTab(); };
+                string delTitle = ct.title;
+                delBtn.Click += (_, _) =>
+                {
+                    var confirm = MessageBox.Show(
+                        this,
+                        $"Delete custom section \"{delTitle}\" and all entries inside it?",
+                        "Delete Section",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+                    if (confirm != MessageBoxResult.Yes) return;
+                    _store.DeleteCustomSection(delId);
+                    RebuildSidebar();
+                    RenderActiveTab();
+                };
                 DockPanel.SetDock(delBtn, Dock.Right);
                 hdrBar.Children.Add(delBtn);
             }
@@ -266,7 +297,7 @@ public partial class MainWindow : Window
                 {
                     foreach (var ph in pb.phases)
                     {
-                        sp.Children.Add(new TextBlock { Text = ph.whenLabel, FontFamily = Serif, FontStyle = FontStyles.Italic, FontSize = 17, Foreground = Br("TomatoBrush"), Margin = new Thickness(0, 8, 0, 4) });
+                        sp.Children.Add(new TextBlock { Text = ph.whenLabel, FontFamily = Serif, FontStyle = FontStyles.Italic, FontSize = 17, Foreground = Br("TomatoInkBrush"), Margin = new Thickness(0, 8, 0, 4) });
                         foreach (var rawS in ph.steps)
                         {
                             var s = _store.LocalizedStep(rawS);
@@ -351,9 +382,25 @@ public partial class MainWindow : Window
                     var rowSp = new StackPanel();
                     if (editable)
                     {
-                        var del = new Button { Content = "✕", HorizontalAlignment = HorizontalAlignment.Right, Background = Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = Br("TomatoBrush") };
+                        var del = new Button { Content = "✕", HorizontalAlignment = HorizontalAlignment.Right, Background = Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = Br("TomatoInkBrush") };
                         int delIdx = idx;
-                        del.Click += (_, _) => { rows.RemoveAt(delIdx); if (rows.Count == 0 && b.crisisEditable == true) rows.Add(new()); _store.Save(); RenderActiveTab(); };
+                        del.Click += (_, _) =>
+                        {
+                            if (delIdx < rows.Count && _store.IsRowUserEdited(bid, rows[delIdx]))
+                            {
+                                var confirm = MessageBox.Show(
+                                    this,
+                                    "Delete this filled row?",
+                                    "Delete Row",
+                                    MessageBoxButton.YesNo,
+                                    MessageBoxImage.Warning);
+                                if (confirm != MessageBoxResult.Yes) return;
+                            }
+                            if (delIdx < rows.Count) rows.RemoveAt(delIdx);
+                            if (rows.Count == 0 && b.crisisEditable == true) rows.Add(new());
+                            _store.Save();
+                            RenderActiveTab();
+                        };
                         rowSp.Children.Add(del);
                     }
                     foreach (var col in loc.cols)
@@ -644,22 +691,49 @@ public partial class MainWindow : Window
 
     private void OnLockClick(object sender, RoutedEventArgs e)
     {
-        string? pw = Dialogs.PromptText("Lock App", "Set a quick passphrase to lock this window:", "", isPassword: true, owner: this);
-        if (string.IsNullOrEmpty(pw)) return;
-        _sessionLockPassphrase = pw;
-        LockPassBox.Password = "";
-        LockErrText.Text = "";
-        LockOverlay.Visibility = Visibility.Visible;
+        if (!_store.HasLocalLock)
+        {
+            string? pw = Dialogs.PromptNewLocalLockPassphrase(this);
+            if (string.IsNullOrEmpty(pw)) return;
+            _store.EnableLocalLock(pw);
+            _store.LockNow();
+            EnterLockedUiState();
+            return;
+        }
+
+        var res = MessageBox.Show(
+            this,
+            "Persistent encrypted local lock is enabled (state.locked.json).\n\nClick YES to lock now and clear data from memory, NO to turn off local lock, or CANCEL to stay unlocked.",
+            "Local Lock",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Question);
+        if (res == MessageBoxResult.Yes)
+        {
+            _store.LockNow();
+            EnterLockedUiState();
+        }
+        else if (res == MessageBoxResult.No)
+        {
+            _store.DisableLocalLock();
+            MessageBox.Show(this, "Local lock turned off. Guide is now stored unencrypted in your user folder.", "Local Lock Disabled");
+        }
     }
 
     private void OnUnlockAttempt(object sender, RoutedEventArgs e)
     {
-        if (LockPassBox.Password == _sessionLockPassphrase)
+        if (_store.UnlockLocalLock(LockPassBox.Password))
         {
             LockOverlay.Visibility = Visibility.Collapsed;
             LockPassBox.Password = "";
             LockErrText.Text = "";
+            BuildRegionList();
+            ApplyThemeAppearance();
+            RebuildSidebar();
+            RenderActiveTab();
         }
-        else LockErrText.Text = "Wrong passphrase.";
+        else
+        {
+            LockErrText.Text = "Wrong passphrase.";
+        }
     }
 }

@@ -6,19 +6,30 @@ import SwiftUI
 /// the local `native/apple` Swift Package (`FamilyGuideCore` + `FamilyGuideUI`).
 @main
 struct FamilyGuideiOSApp: App {
-    @State private var store: GuideStore
+    @State private var store: GuideStore?
+    @State private var initError: String?
 
     init() {
         do {
             _store = State(initialValue: try GuideStore())
+            _initError = State(initialValue: nil)
         } catch {
-            fatalError("Failed to initialize GuideStore: \(error)")
+            _store = State(initialValue: nil)
+            _initError = State(initialValue: error.localizedDescription)
         }
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(store: store)
+            if let store {
+                RootView(store: store)
+            } else {
+                ContentUnavailableView(
+                    "Unable to Open Field Guide",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(initError ?? "Missing guide data resources.")
+                )
+            }
         }
     }
 }

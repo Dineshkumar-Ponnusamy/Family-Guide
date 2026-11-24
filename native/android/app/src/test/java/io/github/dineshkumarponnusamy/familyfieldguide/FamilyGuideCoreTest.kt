@@ -29,9 +29,10 @@ class FamilyGuideCoreTest {
         assertEquals(6, store.data.MONEY_GUIDE.size)
         assertEquals(5, store.data.PRO_FINDER.size)
         assertEquals(9, store.data.REGIONS.size)
-        assertEquals(256, store.data.DICE_WORDS.size)
+        assertEquals(2048, store.data.DICE_WORDS.size)
         assertNotNull(store.data.REGIONS["us_in"]?.moneyGuide)
         assertNotNull(store.data.REGIONS["in"]?.proFinder)
+        assertEquals(6, CryptoEngine.generatePassphrase(words = store.data.DICE_WORDS).split("-").size)
     }
 
     @Test
@@ -156,5 +157,112 @@ class FamilyGuideCoreTest {
         assertTrue(reloaded.state.readMode)
         assertTrue(reloaded.state.largeText)
         assertTrue(reloaded.state.highContrast)
+    }
+
+    @Test
+    fun applyMergeHandlesPhotosFireDrillAndTimestamps() {
+        val store = loadStore()
+        store.state = store.state.copy(
+            photos = listOf(PhotoSnippet("p1", "Existing", "data:image/png;base64,AAAA")),
+            fireDrill = mapOf("fd1" to true),
+            lastDryRun = "2026-05-01T10:00:00Z",
+            reviewed = "2026-06-01T10:00:00Z"
+        )
+        val incPhotos = listOf(
+            PhotoSnippet("p1", "Dup ID", "data:image/png;base64,BBBB"),
+            PhotoSnippet("p2", "Dup URL", "data:image/png;base64,AAAA"),
+            PhotoSnippet("p_xss", "Bad URI", "javascript:alert(1)"),
+            PhotoSnippet("p_svg", "SVG URI", "data:image/svg+xml;base64,PHN2Zz4=")
+        ) + (3..15).map { i -> PhotoSnippet("p$i", "Photo $i", "data:image/jpeg;base64,QUFB$i") }
+
+        val inc = GuideState(
+            photos = incPhotos,
+            fireDrill = mapOf("fd1" to false, "fd2" to true),
+            lastDryRun = "2026-06-15T12:00:00Z",
+            reviewed = "2026-04-01T00:00:00Z"
+        )
+
+        val msg = store.applyMerge(inc, overwriteConflicts = false)
+        assertTrue(msg.contains("+9 photos"))
+        assertEquals(10, store.state.photos.size)
+        assertTrue(store.state.photos.none { it.id == "p_xss" || it.id == "p_svg" })
+        assertEquals(true, store.state.fireDrill["fd1"])
+        assertEquals(true, store.state.fireDrill["fd2"])
+        assertEquals("2026-06-15T12:00:00Z", store.state.lastDryRun)
+        assertEquals("2026-06-01T10:00:00Z", store.state.reviewed)
+    }
+
+    @Test
+    fun atomicSaveStorageEncryptionAndCorruptBackup() {
+        val candidates = listOf(
+            File("src/main/assets/guide-data.json"),
+            File("app/src/main/assets/guide-data.json"),
+            File("native/android/app/src/main/assets/guide-data.json")
+        )
+        val guideJson = candidates.first { it.exists() }.readText()
+        val tmp = Files.createTempDirectory("ffg-android-storage").toFile()
+        val stateFile = File(tmp, "state.json")
+
+        val xorEnc: (ByteArray) -> ByteArray = { bytes ->
+            byteArrayOf(0x01, 0x02) + bytes.map { (it.toInt() xor 0x5A).toByte() }.toByteArray()
+        }
+        val xorDec: (ByteArray) -> ByteArray = { blob ->
+            require(blob.size > 2 && blob[0] == 0x01.toByte() && blob[1] == 0x02.toByte())
+            blob.copyOfRange(2, blob.size).map { (it.toInt() xor 0x5A).toByte() }.toByteArray()
+        }
+
+        // Write plaintext state first, then verify transparent migration on init
+        val plainStore = GuideStore(guideJson, stateFile)
+        plainStore.updateField("q_first", "Anita · 555-0199")
+        assertTrue(stateFile.readText().trimStart().startsWith("{"))
+        assertFalse(File(tmp, "state.json.tmp").exists())
+
+        val encryptedStore = GuideStore(guideJson, stateFile, storageEncrypt = xorEnc, storageDecrypt = xorDec)
+        assertEquals("Anita · 555-0199", encryptedStore.state.f["q_first"])
+        assertFalse(stateFile.readText().trimStart().startsWith("{"))
+
+        // Reload encrypted state
+        val reloaded = GuideStore(guideJson, stateFile, storageEncrypt = xorEnc, storageDecrypt = xorDec)
+        assertEquals("Anita · 555-0199", reloaded.state.f["q_first"])
+
+        // Corrupt stateFile should be backed up to state.json.corrupt
+        stateFile.writeBytes(byteArrayOf(0x7f, 0x00, 0x12, 0x34))
+        val recovered = GuideStore(guideJson, stateFile, storageEncrypt = xorEnc, storageDecrypt = xorDec)
+        assertTrue(File(tmp, "state.json.corrupt").exists())
+        assertNull(recovered.state.f["q_first"])
+    }
+
+    @Test
+    fun fullStatePrivacyAuditScansFieldsListsAndCustomCrypto() {
+        val s1 = loadStore()
+        s1.updateField("d_pm", "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima")
+        s1.updateField("q_binder", "SSN 123-45-6789 is in safe")
+        var audit = s1.computeAudit()
+        assertEquals(AuditSeverity.high, audit.first { it.id == "crypto_safety" }.sev)
+        assertEquals(AuditSeverity.high, audit.first { it.id == "gov_id_privacy" }.sev)
+
+        val s2 = loadStore()
+        s2.addListRow("accounts", mapOf("inst" to "Chase", "last4" to "1234 5678 9012"))
+        audit = s2.computeAudit()
+        assertEquals(AuditSeverity.high, audit.first { it.id == "gov_id_privacy" }.sev)
+
+        val s3 = loadStore()
+        s3.addListRow("gov_ids", mapOf("who" to "Me", "idtype" to "SSN", "last4" to "123456789"))
+        audit = s3.computeAudit()
+        assertEquals(AuditSeverity.high, audit.first { it.id == "gov_id_privacy" }.sev)
+
+        val s4 = loadStore()
+        s4.state = s4.state.copy(
+            extra = mapOf(
+                "tab_c" to listOf(ExtraItem(type = "field", id = "x_wallet", label = "Hardware Wallet Backup"))
+            ),
+            f = mapOf(
+                "q_first" to "Meera 2065550148",
+                "x_wallet" to "abandon ability able about above absent absorb abstract absurd abuse access accident"
+            )
+        )
+        audit = s4.computeAudit()
+        assertEquals(AuditSeverity.high, audit.first { it.id == "crypto_safety" }.sev)
+        assertNull(audit.firstOrNull { it.id == "gov_id_privacy" })
     }
 }

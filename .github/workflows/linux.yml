@@ -6,6 +6,7 @@ on:
     paths:
       - "native/linux/**"
       - "shared/guide-data.json"
+      - "shared/sync_schema.py"
       - ".github/workflows/linux.yml"
   pull_request:
     paths:
@@ -23,12 +24,7 @@ jobs:
       - name: Install GTK4 development libraries
         run: |
           sudo apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends libgtk-4-dev pkg-config build-essential
-
-      - name: Setup Node.js (for schema sync)
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::ForceIPv4=true -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends libgtk-4-dev pkg-config build-essential xvfb
 
       - name: Setup Python & sync shared schema JSON
         uses: actions/setup-python@v5
@@ -49,6 +45,19 @@ jobs:
 
       - name: Build pure native GTK4 release binary
         run: cargo build --manifest-path native/linux/Cargo.toml --release -p family-guide-gtk
+
+      - name: Verify compiled GTK4 binary
+        run: |
+          BIN="native/linux/target/release/family-field-guide"
+          SMOKE_OUT="$("$BIN" --smoke-test)"
+          echo "$SMOKE_OUT"
+          echo "$SMOKE_OUT" | grep -q "LINUX_APP_SMOKE_TEST_PASSED"
+          xvfb-run -a "$BIN" >/tmp/linux-gui.log 2>&1 &
+          GUI_PID=$!
+          sleep 3
+          kill -0 "$GUI_PID"
+          kill "$GUI_PID" || true
+          wait "$GUI_PID" 2>/dev/null || true
 
       - name: Stage Linux distribution bundle
         run: |

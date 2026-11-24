@@ -1,6 +1,8 @@
+import CryptoKit
 import Foundation
 import LocalAuthentication
 import Observation
+import Security
 
 @MainActor
 @Observable
@@ -8,23 +10,109 @@ public final class GuideStore {
     public let data: GuideData
     public var state: GuideState
     public var isBiometricLocked: Bool = false
+    public private(set) var biometricLockEnabled: Bool = false
     public var statusToast: String?
 
     private let stateURL: URL
+    private let localKey: SymmetricKey?
+    private let isDefaultStorage: Bool
+
+    private static let keychainService = "io.github.dineshkumarponnusamy.familyfieldguide.localkey"
+    private static let keychainAccount = "state-encryption-key"
+    private static let biometricDefaultsKey = "ffg.biometricLockEnabled"
+
+    private static let fallbackRegion = RegionPreset(
+        label: "United States",
+        emergency: "911",
+        currency: "USD",
+        crossBorder: false,
+        indiaNotes: false,
+        moneyGuide: nil,
+        proFinder: nil,
+        fieldOverrides: nil,
+        listOverrides: nil,
+        stepOverrides: nil
+    )
+
+    private static func loadOrCreateLocalKey() -> SymmetricKey? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecSuccess, let data = item as? Data, data.count == 32 {
+            return SymmetricKey(data: data)
+        }
+        guard status == errSecItemNotFound else {
+            return nil
+        }
+        let newKeyData = CryptoEngine.randomBytes(32)
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecValueData as String: newKeyData
+        ]
+        guard SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess else {
+            return nil
+        }
+        return SymmetricKey(data: newKeyData)
+    }
+
+    /// Locates bundled `guide-data.json` cleanly in `.app` bundles (`Contents/Resources`
+    /// or nested resource bundles) before touching SwiftPM's generated `Bundle.module`,
+    /// which fatalErrors when packaged outside its original build path.
+    public static func locateGuideDataURL() -> URL? {
+        let bundleName = "FamilyFieldGuide_FamilyGuideCore.bundle"
+        let bundleDirs = [
+            Bundle.main.resourceURL?.appendingPathComponent(bundleName, isDirectory: true),
+            Bundle.main.bundleURL.appendingPathComponent(bundleName, isDirectory: true),
+            Bundle(for: GuideStore.self).resourceURL?.appendingPathComponent(bundleName, isDirectory: true)
+        ].compactMap { $0 }
+
+        for dir in bundleDirs {
+            if let b = Bundle(url: dir),
+               let u = b.url(forResource: "guide-data", withExtension: "json") {
+                return u
+            }
+            let direct = dir.appendingPathComponent("guide-data.json")
+            if FileManager.default.fileExists(atPath: direct.path) {
+                return direct
+            }
+        }
+
+        if let u = Bundle.main.url(forResource: "guide-data", withExtension: "json") {
+            return u
+        }
+        if let u = Bundle(for: GuideStore.self).url(forResource: "guide-data", withExtension: "json") {
+            return u
+        }
+        return Bundle.module.url(forResource: "guide-data", withExtension: "json")
+    }
 
     public init(storageDirectory: URL? = nil) throws {
-        guard let url = Bundle.module.url(forResource: "guide-data", withExtension: "json") else {
+        guard let url = Self.locateGuideDataURL() else {
             throw NSError(domain: "FamilyGuideCore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Missing bundled guide-data.json"])
         }
         let raw = try Data(contentsOf: url)
         self.data = try JSONDecoder().decode(GuideData.self, from: raw)
 
         let dir: URL
+        let defaultStorage = (storageDirectory == nil)
+        self.isDefaultStorage = defaultStorage
         if let storageDirectory {
             dir = storageDirectory
+            self.localKey = nil
         } else {
-            let appSup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let appSup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? FileManager.default.temporaryDirectory
             dir = appSup.appendingPathComponent("FamilyFieldGuide", isDirectory: true)
+            self.localKey = Self.loadOrCreateLocalKey()
         }
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var backupValues = URLResourceValues()
@@ -33,20 +121,55 @@ public final class GuideStore {
         try? mutableDir.setResourceValues(backupValues)
         self.stateURL = dir.appendingPathComponent("state.json")
 
-        if let saved = try? Data(contentsOf: stateURL),
-           let decoded = try? JSONDecoder().decode(GuideState.self, from: saved) {
-            self.state = decoded
-        } else {
-            self.state = GuideState()
+        var loadedState: GuideState?
+        var needsMigrationSave = false
+        if FileManager.default.fileExists(atPath: stateURL.path),
+           let saved = try? Data(contentsOf: stateURL) {
+            let startsWithBrace = saved.first(where: { !($0 == 0x20 || $0 == 0x09 || $0 == 0x0A || $0 == 0x0D) }) == UInt8(ascii: "{")
+            if startsWithBrace, let decoded = try? JSONDecoder().decode(GuideState.self, from: saved) {
+                loadedState = decoded
+                if localKey != nil {
+                    needsMigrationSave = true
+                }
+            } else if let key = localKey,
+                      let box = try? AES.GCM.SealedBox(combined: saved),
+                      let plaintext = try? AES.GCM.open(box, using: key),
+                      let decoded = try? JSONDecoder().decode(GuideState.self, from: plaintext) {
+                loadedState = decoded
+            } else if localKey == nil,
+                      let decoded = try? JSONDecoder().decode(GuideState.self, from: saved) {
+                loadedState = decoded
+            } else {
+                let corruptURL = dir.appendingPathComponent("state.json.corrupt")
+                try? FileManager.default.removeItem(at: corruptURL)
+                try? FileManager.default.copyItem(at: stateURL, to: corruptURL)
+            }
         }
+        self.state = loadedState ?? GuideState()
         normalize()
+        if needsMigrationSave {
+            save(touch: false)
+        }
+        if defaultStorage {
+            let enabled = UserDefaults.standard.bool(forKey: Self.biometricDefaultsKey)
+            self.biometricLockEnabled = enabled
+            if enabled && canEvaluateBiometrics() {
+                self.isBiometricLocked = true
+            }
+        }
     }
 
     public func save(touch: Bool = true) {
         if touch {
             state.updated = ISO8601DateFormatter().string(from: Date())
         }
-        if let encoded = try? JSONEncoder().encode(state) {
+        guard let encoded = try? JSONEncoder().encode(state) else { return }
+        if let key = localKey {
+            if let sealed = try? AES.GCM.seal(encoded, using: key),
+               let combined = sealed.combined {
+                try? combined.write(to: stateURL, options: [.atomic])
+            }
+        } else {
             try? encoded.write(to: stateURL, options: [.atomic])
         }
     }
@@ -77,7 +200,7 @@ public final class GuideStore {
     }
 
     public var currentRegion: RegionPreset {
-        data.REGIONS[state.region] ?? data.REGIONS["us"]!
+        data.REGIONS[state.region] ?? data.REGIONS["us"] ?? data.REGIONS.values.first ?? Self.fallbackRegion
     }
 
     public func localizedField(_ f: FieldDef) -> FieldDef {
@@ -184,7 +307,7 @@ public final class GuideStore {
     // MARK: - Demo & Actions
 
     public func loadDemo() {
-        let src = data.DEMO_FAMILIES[state.region] ?? data.DEMO_FAMILIES["default"]!
+        guard let src = data.DEMO_FAMILIES[state.region] ?? data.DEMO_FAMILIES["default"] else { return }
         let keepRegion = state.region
         let keepLarge = state.largeText
         let keepHc = state.highContrast
@@ -323,33 +446,72 @@ public final class GuideStore {
             items.append(AuditItem(id: "digital_legacy", sev: .ok, title: "Digital legacy / password access set", detail: "Password manager or platform legacy contacts are documented."))
         }
 
+        let seedPattern = #"\b([a-z]{3,}\s+){11,}[a-z]{3,}\b"#
+        func containsSeed(_ text: String) -> Bool {
+            text.range(of: seedPattern, options: [.regularExpression, .caseInsensitive]) != nil
+        }
+
         let cryptoRows = rowsOf("crypto")
-        if !cryptoRows.isEmpty {
-            let hasSeed = cryptoRows.contains { row in
-                row.values.contains { $0.range(of: #"\b([a-z]{3,}\s+){11,}[a-z]{3,}\b"#, options: [.regularExpression, .caseInsensitive]) != nil }
+        let cryptoFieldIds = ["d_pm", "d_2fa", "d_phone", "d_keys", "d_safe", "d_sim", "d_email"]
+        let cryptoNamePattern = #"crypto|wallet|seed|ledger|trezor"#
+        var hasSeed = cryptoRows.contains { row in row.values.contains(where: containsSeed) }
+        if !hasSeed {
+            hasSeed = cryptoFieldIds.contains { containsSeed(f($0)) }
+        }
+        if !hasSeed {
+            for items in state.extra.values {
+                for item in items {
+                    let name = "\(item.label ?? "") \(item.title ?? "") \(item.id)"
+                    guard name.range(of: cryptoNamePattern, options: [.regularExpression, .caseInsensitive]) != nil else { continue }
+                    if item.type == "field" {
+                        if containsSeed(f(item.id)) { hasSeed = true; break }
+                    } else if item.type == "list" {
+                        if rowsOf(item.id).contains(where: { $0.values.contains(where: containsSeed) }) {
+                            hasSeed = true; break
+                        }
+                    }
+                }
+                if hasSeed { break }
             }
+        }
+        if !hasSeed {
+            for (lid, rows) in state.lists where lid != "crypto" {
+                guard lid.range(of: cryptoNamePattern, options: [.regularExpression, .caseInsensitive]) != nil else { continue }
+                if rows.filter({ isRowUserEdited(blockId: lid, row: $0) }).contains(where: { $0.values.contains(where: containsSeed) }) {
+                    hasSeed = true
+                    break
+                }
+            }
+        }
+
+        if hasSeed {
+            items.append(AuditItem(id: "crypto_safety", sev: .high, title: "Possible crypto seed phrase detected!", detail: "Never store 12/24-word recovery seeds in this guide—write ONLY where the physical backup lives.", tab: "money", block: "crypto"))
+        } else if !cryptoRows.isEmpty {
             let missCrypto = cryptoRows.contains {
                 ($0["access"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || ($0["helper"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
-            if hasSeed {
-                items.append(AuditItem(id: "crypto_safety", sev: .high, title: "Possible crypto seed phrase detected!", detail: "Never store 12/24-word recovery seeds in this guide—write ONLY where the physical backup lives.", tab: "money", block: "crypto"))
-            } else if missCrypto {
+            if missCrypto {
                 items.append(AuditItem(id: "crypto_safety", sev: .med, title: "Crypto entry missing recovery location or helper", detail: "Record where the seed/hardware wallet is stored and a trusted helper.", tab: "money", block: "crypto"))
             } else {
                 items.append(AuditItem(id: "crypto_safety", sev: .ok, title: "Crypto recovery map documented (no raw seeds)", detail: "Holdings, storage locations, and trusted helper instructions are recorded."))
             }
         }
 
+        let formattedIdPattern = #"\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b"#
         let govRows = rowsOf("gov_ids")
-        if !govRows.isEmpty {
-            let hasFullId = govRows.contains { row in
-                row.values.contains { $0.range(of: #"\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b|\b\d{9,}\b"#, options: .regularExpression) != nil }
+        let hasFormattedIdInFields = state.f.values.contains { $0.range(of: formattedIdPattern, options: .regularExpression) != nil }
+        let hasFormattedIdInLists = state.lists.values.contains { rows in
+            rows.contains { row in
+                row.values.contains { $0.range(of: formattedIdPattern, options: .regularExpression) != nil }
             }
-            if hasFullId {
-                items.append(AuditItem(id: "gov_id_privacy", sev: .high, title: "Possible full SSN / National ID detected!", detail: "Safety rule: enter ONLY the last 4 digits and where the original card lives.", tab: "docs", block: "gov_ids"))
-            } else {
-                items.append(AuditItem(id: "gov_id_privacy", sev: .ok, title: "Key IDs mapped safely (last 4 only)", detail: "Government IDs record only last 4 digits and physical locations."))
-            }
+        }
+        let hasLongGovLast4 = govRows.contains { row in
+            (row["last4"] ?? "").range(of: #"\b\d{9,}\b"#, options: .regularExpression) != nil
+        }
+        if hasFormattedIdInFields || hasFormattedIdInLists || hasLongGovLast4 {
+            items.append(AuditItem(id: "gov_id_privacy", sev: .high, title: "Possible full SSN / National ID detected!", detail: "Safety rule: enter ONLY the last 4 digits and where the original card lives.", tab: "docs", block: "gov_ids"))
+        } else if !govRows.isEmpty {
+            items.append(AuditItem(id: "gov_id_privacy", sev: .ok, title: "Key IDs mapped safely (last 4 only)", detail: "Government IDs record only last 4 digits and physical locations."))
         }
 
         if !f("q_life").isEmpty || !lifeRows.isEmpty {
@@ -514,9 +676,20 @@ public final class GuideStore {
         return MergePlan(newFields: newFields, conflictFields: conflicts, newTabs: newTabs, newExtras: newExtras, newRows: newRows, newChecks: newChecks)
     }
 
+    private static func safeImageDataUrl(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.range(
+            of: #"\Adata:image/(?:jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=]+\z"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil else {
+            return nil
+        }
+        return trimmed
+    }
+
     @discardableResult
     public func applyMerge(incoming inc: GuideState, overwriteConflicts: Bool) -> String {
-        var addedF = 0, updatedF = 0, addedR = 0, addedC = 0, addedS = 0
+        var addedF = 0, updatedF = 0, addedR = 0, addedC = 0, addedS = 0, addedP = 0
         var curTabIds = Set(state.customTabs.map(\.id))
         for t in inc.customTabs where !curTabIds.contains(t.id) {
             state.customTabs.append(t)
@@ -558,9 +731,31 @@ public final class GuideStore {
             }
             state.lists[lid] = curRows
         }
+        var photoKeys = Set(state.photos.map { "\($0.label)::\($0.dataUrl.prefix(64))" })
+        for p in inc.photos {
+            guard state.photos.count < 10 else { break }
+            guard let safeUrl = Self.safeImageDataUrl(p.dataUrl) else { continue }
+            let pk = "\(p.label)::\(safeUrl.prefix(64))"
+            if !photoKeys.contains(pk) {
+                let pid = p.id.isEmpty ? "ph_\(UUID().uuidString.prefix(8).lowercased())" : p.id
+                let label = p.label.isEmpty ? "Photo" : p.label
+                state.photos.append(PhotoSnippet(id: pid, label: label, dataUrl: safeUrl))
+                photoKeys.insert(pk)
+                addedP += 1
+            }
+        }
         for (k, v) in inc.checks where v && !(state.checks[k] ?? false) {
             state.checks[k] = true
             addedC += 1
+        }
+        for (k, v) in inc.fireDrill where v {
+            state.fireDrill[k] = true
+        }
+        if let dr = inc.lastDryRun, !dr.isEmpty, state.lastDryRun.map({ dr > $0 }) ?? true {
+            state.lastDryRun = dr
+        }
+        if let rev = inc.reviewed, !rev.isEmpty, state.reviewed.map({ rev > $0 }) ?? true {
+            state.reviewed = rev
         }
         normalize()
         save()
@@ -569,6 +764,7 @@ public final class GuideStore {
         if updatedF > 0 { parts.append("\(updatedF) updated") }
         if addedR > 0 { parts.append("+\(addedR) rows") }
         if addedS > 0 { parts.append("+\(addedS) sections") }
+        if addedP > 0 { parts.append("+\(addedP) photos") }
         if addedC > 0 { parts.append("+\(addedC) checks") }
         let msg = parts.isEmpty ? "Already up to date" : "Merged (\(parts.joined(separator: ", ")))"
         statusToast = msg
@@ -640,6 +836,17 @@ public final class GuideStore {
     }
 
     // MARK: - Biometric Lock (Face ID / Touch ID)
+
+    public func canEvaluateBiometrics() -> Bool {
+        let ctx = LAContext()
+        var err: NSError?
+        return ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err)
+    }
+
+    public func setBiometricLockEnabled(_ enabled: Bool) {
+        biometricLockEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: Self.biometricDefaultsKey)
+    }
 
     public func authenticateWithBiometrics() async -> Bool {
         let ctx = LAContext()

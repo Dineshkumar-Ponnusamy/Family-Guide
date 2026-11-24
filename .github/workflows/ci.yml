@@ -18,6 +18,27 @@ jobs:
         with:
           node-version: 20
 
+      - name: Verify shared schema is in sync with schema.js & regions.js
+        run: |
+          python3 shared/sync_schema.py
+          git diff --exit-code shared/guide-data.json native/
+
+      - name: Verify sw.js CACHE version bump when cached web assets change (PRs)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          CHANGED=$(git diff --name-only FETCH_HEAD HEAD -- app.js styles.css index.html schema.js regions.js manifest.json)
+          if [ -n "$CHANGED" ]; then
+            echo "Cached web assets changed:"
+            echo "$CHANGED"
+            if ! git diff FETCH_HEAD HEAD -- sw.js | grep -qE '^\+.*CACHE[[:space:]]*='; then
+              echo "::error::Cached web assets changed without bumping CACHE in sw.js"
+              exit 1
+            fi
+          fi
+
       - name: Validate JSON configurations
         run: |
           python3 -m json.tool manifest.json > /dev/null

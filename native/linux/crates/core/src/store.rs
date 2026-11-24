@@ -1,16 +1,19 @@
 use std::collections::{HashMap, HashSet};
 use std::env;
-use std::fs;
-use std::path::PathBuf;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
-use chrono::Utc;
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use rand::rngs::OsRng;
 use rand::RngCore;
 use regex::Regex;
 
+use crate::crypto::{decrypt_state, encrypt_state};
 use crate::models::{
-    AuditItem, AuditSeverity, BlockDef, ColDef, CustomTab, ExtraItem, FieldDef, GuideData,
-    GuideState, MergeConflict, MergePlan, PlaybookStep, RegionPreset, SearchHit, SectionTemplate,
+    AuditItem, AuditSeverity, BlockDef, ColDef, CustomTab, EncryptedBackupPackage, ExtraItem,
+    FieldDef, GuideData, GuideState, MergeConflict, MergePlan, PlaybookStep, RegionPreset,
+    SearchHit, SectionTemplate,
 };
 
 const EMBEDDED_GUIDE_DATA: &str = include_str!("../assets/guide-data.json");
@@ -19,11 +22,41 @@ pub struct GuideStore {
     pub data: GuideData,
     pub state: GuideState,
     state_path: Option<PathBuf>,
+    pub active_lock_pass: Option<String>,
 }
 
 fn short_id(prefix: &str) -> String {
     let n = OsRng.next_u32();
     format!("{prefix}_{n:08x}")
+}
+
+fn write_atomic_0600(tmp_path: &Path, final_path: &Path, bytes: &[u8]) -> Result<(), String> {
+    if let Some(parent) = final_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {e}"))?;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(tmp_path)
+            .map_err(|e| format!("Failed to open temp file: {e}"))?;
+        f.write_all(bytes)
+            .map_err(|e| format!("Failed to write temp file: {e}"))?;
+        f.sync_all()
+            .map_err(|e| format!("Failed to flush temp file: {e}"))?;
+        fs::set_permissions(tmp_path, fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("Failed to set permissions: {e}"))?;
+    }
+    #[cfg(not(unix))]
+    {
+        fs::write(tmp_path, bytes).map_err(|e| format!("Failed to write temp file: {e}"))?;
+    }
+    fs::rename(tmp_path, final_path).map_err(|e| format!("Failed to rename temp file: {e}"))?;
+    Ok(())
 }
 
 fn default_xdg_state_path() -> PathBuf {
@@ -55,7 +88,26 @@ impl GuideStore {
         let data = Self::load_embedded_data()?;
         let state = if let Some(ref path) = state_path {
             if let Ok(raw) = fs::read(path) {
-                serde_json::from_slice::<GuideState>(&raw).unwrap_or_default()
+                match serde_json::from_slice::<GuideState>(&raw) {
+                    Ok(parsed) => parsed,
+                    Err(_) => {
+                        let mut corrupt_os = path.as_os_str().to_os_string();
+                        corrupt_os.push(".corrupt");
+                        let corrupt_path = PathBuf::from(corrupt_os);
+                        if fs::rename(path, &corrupt_path).is_err() {
+                            let _ = fs::copy(path, &corrupt_path);
+                        }
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::PermissionsExt;
+                            let _ = fs::set_permissions(
+                                &corrupt_path,
+                                fs::Permissions::from_mode(0o600),
+                            );
+                        }
+                        GuideState::default()
+                    }
+                }
             } else {
                 GuideState::default()
             }
@@ -67,32 +119,111 @@ impl GuideStore {
             data,
             state,
             state_path,
+            active_lock_pass: None,
         };
         store.normalize();
         Ok(store)
     }
 
+    fn locked_path(&self) -> Option<PathBuf> {
+        self.state_path.as_ref().map(|p| {
+            p.parent()
+                .map(|dir| dir.join("state.locked.json"))
+                .unwrap_or_else(|| PathBuf::from("state.locked.json"))
+        })
+    }
+
+    pub fn is_locked_on_disk(&self) -> bool {
+        match (&self.state_path, self.locked_path()) {
+            (Some(state_p), Some(locked_p)) => locked_p.exists() && !state_p.exists(),
+            _ => false,
+        }
+    }
+
+    fn write_locked_file(&self, pass: &str) -> Result<(), String> {
+        let (Some(ref state_p), Some(locked_p)) = (&self.state_path, self.locked_path()) else {
+            return Ok(());
+        };
+        let pkg = encrypt_state(&self.state, pass)?;
+        let encoded =
+            serde_json::to_vec_pretty(&pkg).map_err(|e| format!("JSON encode error: {e}"))?;
+        let locked_tmp = locked_p.with_extension("json.tmp");
+        write_atomic_0600(&locked_tmp, &locked_p, &encoded)?;
+        if state_p.exists() {
+            let _ = fs::remove_file(state_p);
+        }
+        Ok(())
+    }
+
+    fn write_plaintext_file(&self) -> Result<(), String> {
+        let Some(ref path) = self.state_path else {
+            return Ok(());
+        };
+        let encoded =
+            serde_json::to_vec_pretty(&self.state).map_err(|e| format!("JSON encode error: {e}"))?;
+        let tmp = path.with_extension("json.tmp");
+        write_atomic_0600(&tmp, path, &encoded)
+    }
+
     pub fn save(&mut self, touch: bool) {
+        if self.active_lock_pass.is_none() && self.is_locked_on_disk() {
+            return;
+        }
         if touch {
             self.state.updated = Some(Utc::now().to_rfc3339());
         }
-        let Some(ref path) = self.state_path else {
+        if let Some(ref pass) = self.active_lock_pass {
+            let _ = self.write_locked_file(pass);
             return;
-        };
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
         }
-        if let Ok(encoded) = serde_json::to_vec_pretty(&self.state) {
-            let tmp = path.with_extension("json.tmp");
-            if fs::write(&tmp, encoded).is_ok() {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600));
-                }
-                let _ = fs::rename(tmp, path);
+        let _ = self.write_plaintext_file();
+    }
+
+    pub fn enable_local_lock(&mut self, pass: &str) -> Result<(), String> {
+        if pass.trim().len() < 8 {
+            return Err("Use at least 8 characters for the local lock passphrase.".to_string());
+        }
+        self.write_locked_file(pass)?;
+        self.active_lock_pass = Some(pass.to_string());
+        Ok(())
+    }
+
+    pub fn unlock_local_lock(&mut self, pass: &str) -> Result<(), String> {
+        let Some(locked_p) = self.locked_path() else {
+            return Err("No local lock file path configured.".to_string());
+        };
+        let raw = fs::read(&locked_p)
+            .map_err(|_| "Could not read encrypted local guide file.".to_string())?;
+        let pkg: EncryptedBackupPackage = serde_json::from_slice(&raw)
+            .map_err(|_| "Encrypted local guide file is corrupted.".to_string())?;
+        let decrypted = decrypt_state(&pkg, pass)?;
+        self.state = decrypted;
+        self.normalize();
+        self.active_lock_pass = Some(pass.to_string());
+        Ok(())
+    }
+
+    pub fn disable_local_lock(&mut self) -> Result<(), String> {
+        if self.active_lock_pass.is_none() && self.is_locked_on_disk() {
+            return Err("Unlock the guide before disabling local lock.".to_string());
+        }
+        self.write_plaintext_file()?;
+        if let Some(locked_p) = self.locked_path() {
+            if locked_p.exists() {
+                fs::remove_file(&locked_p)
+                    .map_err(|e| format!("Could not remove state.locked.json: {e}"))?;
             }
         }
+        self.active_lock_pass = None;
+        Ok(())
+    }
+
+    pub fn lock_now(&mut self) {
+        if let Some(ref pass) = self.active_lock_pass {
+            let _ = self.write_locked_file(pass);
+        }
+        self.state = GuideState::default();
+        self.active_lock_pass = None;
     }
 
     pub fn normalize(&mut self) {
@@ -695,28 +826,87 @@ impl GuideStore {
             });
         }
 
+        let seed_re = Regex::new(r"(?i)\b([a-z]{3,}\s+){11,}[a-z]{3,}\b").unwrap();
+        let crypto_name_re =
+            Regex::new(r"(?i)crypto|seed|wallet|ledger|trezor|bitcoin|eth|mnemonic").unwrap();
+
         let crypto_rows = rows_of("crypto");
-        if !crypto_rows.is_empty() {
-            let seed_re = Regex::new(r"(?i)\b([a-z]{3,}\s+){11,}[a-z]{3,}\b").unwrap();
-            let has_seed = crypto_rows
-                .iter()
-                .any(|row| row.values().any(|v| seed_re.is_match(v)));
+        let mut seed_hit: Option<(String, Option<String>, Option<String>)> = None;
+
+        if crypto_rows
+            .iter()
+            .any(|row| row.values().any(|v| seed_re.is_match(v)))
+        {
+            seed_hit = Some(("money".to_string(), Some("crypto".to_string()), None));
+        }
+
+        if seed_hit.is_none() {
+            for fid in ["d_pm", "d_2fa", "d_phone", "d_keys", "d_safe", "d_sim", "d_email"] {
+                if seed_re.is_match(f(fid)) {
+                    seed_hit = Some(("docs".to_string(), None, Some(fid.to_string())));
+                    break;
+                }
+            }
+        }
+
+        if seed_hit.is_none() {
+            for (tid, extras) in &self.state.extra {
+                let tab_is_crypto = self
+                    .state
+                    .custom_tabs
+                    .iter()
+                    .find(|t| &t.id == tid)
+                    .is_some_and(|t| {
+                        crypto_name_re.is_match(&t.title) || crypto_name_re.is_match(&t.label)
+                    });
+                for item in extras {
+                    let item_name = item
+                        .label
+                        .as_deref()
+                        .or(item.title.as_deref())
+                        .unwrap_or("");
+                    if !(tab_is_crypto
+                        || crypto_name_re.is_match(item_name)
+                        || crypto_name_re.is_match(&item.id))
+                    {
+                        continue;
+                    }
+                    if item.item_type == "field" {
+                        if seed_re.is_match(f(&item.id)) {
+                            seed_hit = Some((tid.clone(), None, Some(item.id.clone())));
+                            break;
+                        }
+                    } else if rows_of(&item.id)
+                        .iter()
+                        .any(|row| row.values().any(|v| seed_re.is_match(v)))
+                    {
+                        seed_hit = Some((tid.clone(), Some(item.id.clone()), None));
+                        break;
+                    }
+                }
+                if seed_hit.is_some() {
+                    break;
+                }
+            }
+        }
+
+        if let Some((tab, block, field)) = seed_hit {
+            items.push(AuditItem {
+                id: "crypto_safety".to_string(),
+                sev: AuditSeverity::High,
+                title: "Possible crypto seed phrase detected!".to_string(),
+                detail: "Never store 12/24-word recovery seeds in this guide—write ONLY where the physical backup lives.".to_string(),
+                tab: Some(tab),
+                block,
+                field,
+                act: None,
+            });
+        } else if !crypto_rows.is_empty() {
             let miss_crypto = crypto_rows.iter().any(|r| {
                 r.get("access").map(|s| s.trim()).unwrap_or("").is_empty()
                     || r.get("helper").map(|s| s.trim()).unwrap_or("").is_empty()
             });
-            if has_seed {
-                items.push(AuditItem {
-                    id: "crypto_safety".to_string(),
-                    sev: AuditSeverity::High,
-                    title: "Possible crypto seed phrase detected!".to_string(),
-                    detail: "Never store 12/24-word recovery seeds in this guide—write ONLY where the physical backup lives.".to_string(),
-                    tab: Some("money".to_string()),
-                    block: Some("crypto".to_string()),
-                    field: None,
-                    act: None,
-                });
-            } else if miss_crypto {
+            if miss_crypto {
                 items.push(AuditItem {
                     id: "crypto_safety".to_string(),
                     sev: AuditSeverity::Med,
@@ -742,35 +932,61 @@ impl GuideStore {
         }
 
         let gov_rows = rows_of("gov_ids");
-        if !gov_rows.is_empty() {
-            let full_id_re =
-                Regex::new(r"\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b|\b\d{9,}\b").unwrap();
-            let has_full_id = gov_rows
-                .iter()
-                .any(|row| row.values().any(|v| full_id_re.is_match(v)));
-            if has_full_id {
-                items.push(AuditItem {
-                    id: "gov_id_privacy".to_string(),
-                    sev: AuditSeverity::High,
-                    title: "Possible full SSN / National ID detected!".to_string(),
-                    detail: "Safety rule: enter ONLY the last 4 digits and where the original card lives.".to_string(),
-                    tab: Some("docs".to_string()),
-                    block: Some("gov_ids".to_string()),
-                    field: None,
-                    act: None,
-                });
-            } else {
-                items.push(AuditItem {
-                    id: "gov_id_privacy".to_string(),
-                    sev: AuditSeverity::Ok,
-                    title: "Key IDs mapped safely (last 4 only)".to_string(),
-                    detail: "Government IDs record only last 4 digits and physical locations.".to_string(),
-                    tab: None,
-                    block: None,
-                    field: None,
-                    act: None,
-                });
+        let formatted_id_re =
+            Regex::new(r"\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b").unwrap();
+        let long_digits_re = Regex::new(r"\b\d{9,}\b").unwrap();
+
+        let mut id_hit: Option<(String, Option<String>, Option<String>)> = None;
+        if gov_rows.iter().any(|row| {
+            row.values().any(|v| formatted_id_re.is_match(v))
+                || row
+                    .get("last4")
+                    .is_some_and(|v| long_digits_re.is_match(v))
+        }) {
+            id_hit = Some(("docs".to_string(), Some("gov_ids".to_string()), None));
+        }
+        if id_hit.is_none() {
+            for (fid, val) in &self.state.f {
+                if formatted_id_re.is_match(val) {
+                    id_hit = Some(("docs".to_string(), None, Some(fid.clone())));
+                    break;
+                }
             }
+        }
+        if id_hit.is_none() {
+            for lid in self.state.lists.keys() {
+                if rows_of(lid)
+                    .iter()
+                    .any(|row| row.values().any(|v| formatted_id_re.is_match(v)))
+                {
+                    id_hit = Some(("docs".to_string(), Some(lid.clone()), None));
+                    break;
+                }
+            }
+        }
+
+        if let Some((tab, block, field)) = id_hit {
+            items.push(AuditItem {
+                id: "gov_id_privacy".to_string(),
+                sev: AuditSeverity::High,
+                title: "Possible full SSN / National ID detected!".to_string(),
+                detail: "Safety rule: enter ONLY the last 4 digits and where the original card lives.".to_string(),
+                tab: Some(tab),
+                block,
+                field,
+                act: None,
+            });
+        } else if !gov_rows.is_empty() {
+            items.push(AuditItem {
+                id: "gov_id_privacy".to_string(),
+                sev: AuditSeverity::Ok,
+                title: "Key IDs mapped safely (last 4 only)".to_string(),
+                detail: "Government IDs record only last 4 digits and physical locations.".to_string(),
+                tab: None,
+                block: None,
+                field: None,
+                act: None,
+            });
         }
 
         if !f("q_life").is_empty() || !life_rows.is_empty() {
@@ -1221,12 +1437,49 @@ impl GuideStore {
         }
     }
 
+    fn parse_iso_timestamp(s: &str) -> Option<DateTime<Utc>> {
+        let trimmed = s.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if let Ok(dt) = DateTime::parse_from_rfc3339(trimmed) {
+            return Some(dt.with_timezone(&Utc));
+        }
+        if let Ok(ndt) = NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S") {
+            return Some(ndt.and_utc());
+        }
+        if let Ok(nd) = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
+            return nd.and_hms_opt(0, 0, 0).map(|ndt| ndt.and_utc());
+        }
+        None
+    }
+
+    fn merge_newer_iso(target: &mut Option<String>, incoming: &Option<String>) -> bool {
+        let Some(ref inc_raw) = incoming else {
+            return false;
+        };
+        let Some(inc_dt) = Self::parse_iso_timestamp(inc_raw) else {
+            return false;
+        };
+        let should_replace = match target.as_deref().and_then(Self::parse_iso_timestamp) {
+            Some(cur_dt) => inc_dt > cur_dt,
+            None => true,
+        };
+        if should_replace {
+            *target = Some(inc_raw.trim().to_string());
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn apply_merge(&mut self, incoming: &GuideState, overwrite_conflicts: bool) -> String {
         let mut added_f = 0usize;
         let mut updated_f = 0usize;
         let mut added_r = 0usize;
         let mut added_c = 0usize;
         let mut added_s = 0usize;
+        let mut added_p = 0usize;
 
         let mut cur_tab_ids: HashSet<String> =
             self.state.custom_tabs.iter().map(|t| t.id.clone()).collect();
@@ -1301,6 +1554,47 @@ impl GuideStore {
             }
         }
 
+        for (k, v) in &incoming.fire_drill {
+            if *v && !*self.state.fire_drill.get(k).unwrap_or(&false) {
+                self.state.fire_drill.insert(k.clone(), true);
+                added_c += 1;
+            }
+        }
+
+        let photo_re =
+            Regex::new(r"^data:image/(?:jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=]+$").unwrap();
+        let mut existing_urls: HashSet<String> =
+            self.state.photos.iter().map(|p| p.data_url.clone()).collect();
+        let mut existing_ids: HashSet<String> = self
+            .state
+            .photos
+            .iter()
+            .filter(|p| !p.id.is_empty())
+            .map(|p| p.id.clone())
+            .collect();
+        for p in &incoming.photos {
+            if self.state.photos.len() >= 10 {
+                break;
+            }
+            if !photo_re.is_match(&p.data_url) {
+                continue;
+            }
+            if existing_urls.contains(&p.data_url)
+                || (!p.id.is_empty() && existing_ids.contains(&p.id))
+            {
+                continue;
+            }
+            existing_urls.insert(p.data_url.clone());
+            if !p.id.is_empty() {
+                existing_ids.insert(p.id.clone());
+            }
+            self.state.photos.push(p.clone());
+            added_p += 1;
+        }
+
+        Self::merge_newer_iso(&mut self.state.last_dry_run, &incoming.last_dry_run);
+        Self::merge_newer_iso(&mut self.state.reviewed, &incoming.reviewed);
+
         self.normalize();
         self.save(true);
 
@@ -1319,6 +1613,9 @@ impl GuideStore {
         }
         if added_c > 0 {
             parts.push(format!("+{added_c} checks"));
+        }
+        if added_p > 0 {
+            parts.push(format!("+{added_p} photos"));
         }
         if parts.is_empty() {
             "Already up to date".to_string()

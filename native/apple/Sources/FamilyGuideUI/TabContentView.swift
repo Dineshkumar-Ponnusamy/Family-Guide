@@ -6,6 +6,9 @@ public struct TabContentView: View {
     let tab: TabDef
     let jumpHandler: (String, String?, String?) -> Void
 
+    @State private var pendingRowDelete: (listId: String, index: Int, crisisEditable: Bool)?
+    @State private var showDeleteRowAlert = false
+
     public var body: some View {
         let large = store.state.largeText
         let hc = store.state.highContrast
@@ -23,6 +26,24 @@ public struct TabContentView: View {
             }
 
             ExtrasSectionView(store: store, tabId: tab.id, customTitle: "More details")
+        }
+        .alert("Delete this row?", isPresented: $showDeleteRowAlert) {
+            Button("Delete", role: .destructive) {
+                if let pending = pendingRowDelete,
+                   store.state.lists[pending.listId]?.indices.contains(pending.index) == true {
+                    store.state.lists[pending.listId]?.remove(at: pending.index)
+                    if store.state.lists[pending.listId]?.isEmpty == true && pending.crisisEditable {
+                        store.state.lists[pending.listId] = [[:]]
+                    }
+                    store.save()
+                }
+                pendingRowDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingRowDelete = nil
+            }
+        } message: {
+            Text("This will permanently remove the row's details from your guide.")
         }
     }
 
@@ -218,11 +239,18 @@ public struct TabContentView: View {
                             Spacer()
                             if editable {
                                 Button(role: .destructive) {
-                                    store.state.lists[id]?.remove(at: idx)
-                                    if store.state.lists[id]?.isEmpty == true && crisisEditable {
-                                        store.state.lists[id] = [[:]]
+                                    let row = store.state.lists[id]?[idx] ?? [:]
+                                    let hasContent = row.values.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                                    if hasContent {
+                                        pendingRowDelete = (id, idx, crisisEditable)
+                                        showDeleteRowAlert = true
+                                    } else {
+                                        store.state.lists[id]?.remove(at: idx)
+                                        if store.state.lists[id]?.isEmpty == true && crisisEditable {
+                                            store.state.lists[id] = [[:]]
+                                        }
+                                        store.save()
                                     }
-                                    store.save()
                                 } label: {
                                     Image(systemName: "xmark.circle").foregroundColor(Theme.mute)
                                 }
@@ -401,6 +429,7 @@ public struct TabContentView: View {
 public struct CustomTabContentView: View {
     @Bindable var store: GuideStore
     let customTab: CustomTab
+    @State private var showDeleteSectionAlert = false
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -411,7 +440,7 @@ public struct CustomTabContentView: View {
                 Spacer()
                 if !store.state.readMode {
                     Button(role: .destructive) {
-                        store.deleteCustomSection(customTab.id)
+                        showDeleteSectionAlert = true
                     } label: {
                         Text("Delete section")
                     }
@@ -419,6 +448,14 @@ public struct CustomTabContentView: View {
                 }
             }
             ExtrasSectionView(store: store, tabId: customTab.id, customTitle: "Details")
+        }
+        .alert("Delete \"\(customTab.title)\"?", isPresented: $showDeleteSectionAlert) {
+            Button("Delete Section", role: .destructive) {
+                store.deleteCustomSection(customTab.id)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently remove this custom section and all of its fields and tables.")
         }
     }
 }

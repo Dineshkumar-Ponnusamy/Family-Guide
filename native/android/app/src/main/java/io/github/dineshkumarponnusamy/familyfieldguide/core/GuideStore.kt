@@ -3,21 +3,22 @@ package io.github.dineshkumarponnusamy.familyfieldguide.core
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
+import java.time.OffsetDateTime
 import java.util.UUID
 import kotlin.math.roundToInt
 
 class GuideStore(
     guideDataJson: String,
-    private val stateFile: File
+    private val stateFile: File,
+    private val storageEncrypt: ((ByteArray) -> ByteArray)? = null,
+    private val storageDecrypt: ((ByteArray) -> ByteArray)? = null
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     val data: GuideData = json.decodeFromString(GuideData.serializer(), guideDataJson)
-    var state: GuideState = if (stateFile.exists()) {
-        runCatching { json.decodeFromString(GuideState.serializer(), stateFile.readText()) }.getOrElse { GuideState() }
-    } else {
-        GuideState()
-    }
+    var state: GuideState = loadInitialState()
     var statusToast: String? = null
     var onStateChanged: (() -> Unit)? = null
 
@@ -25,13 +26,64 @@ class GuideStore(
         normalize()
     }
 
+    private fun loadInitialState(): GuideState {
+        if (!stateFile.exists()) return GuideState()
+        var wasPlainJson = false
+        val loaded = runCatching {
+            val raw = stateFile.readBytes()
+            val trimmedFirst = raw.firstOrNull { b ->
+                b != ' '.code.toByte() && b != '\n'.code.toByte() && b != '\r'.code.toByte() && b != '\t'.code.toByte()
+            }
+            wasPlainJson = trimmedFirst == '{'.code.toByte()
+            val plainBytes = if (storageDecrypt != null && !wasPlainJson) {
+                storageDecrypt.invoke(raw)
+            } else {
+                raw
+            }
+            json.decodeFromString(GuideState.serializer(), String(plainBytes, Charsets.UTF_8))
+        }.getOrElse {
+            runCatching {
+                val corruptFile = File(stateFile.parentFile, "state.json.corrupt")
+                stateFile.copyTo(corruptFile, overwrite = true)
+            }
+            return GuideState()
+        }
+        if (wasPlainJson && storageEncrypt != null) {
+            runCatching { writeStateAtomically(loaded) }
+        }
+        return loaded
+    }
+
+    private fun writeStateAtomically(targetState: GuideState) {
+        stateFile.parentFile?.mkdirs()
+        val plainBytes = json.encodeToString(targetState).toByteArray(Charsets.UTF_8)
+        val outBytes = storageEncrypt?.invoke(plainBytes) ?: plainBytes
+        val tmpFile = File(stateFile.parentFile, "state.json.tmp")
+        tmpFile.writeBytes(outBytes)
+        try {
+            Files.move(
+                tmpFile.toPath(),
+                stateFile.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE
+            )
+        } catch (_: Exception) {
+            if (!tmpFile.renameTo(stateFile)) {
+                Files.move(
+                    tmpFile.toPath(),
+                    stateFile.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+        }
+    }
+
     fun save(touch: Boolean = true) {
         if (touch) {
             state = state.copy(updated = Instant.now().toString())
         }
         runCatching {
-            stateFile.parentFile?.mkdirs()
-            stateFile.writeText(json.encodeToString(state))
+            writeStateAtomically(state)
         }
         onStateChanged?.invoke()
     }
@@ -315,9 +367,19 @@ class GuideStore(
         }
 
         val cryptoRows = rowsOf("crypto")
-        if (cryptoRows.isNotEmpty()) {
-            val seedRe = Regex("""\b([a-z]{3,}\s+){11,}[a-z]{3,}\b""", RegexOption.IGNORE_CASE)
-            val hasSeed = cryptoRows.any { r -> r.values.any { seedRe.containsMatchIn(it) } }
+        val seedRe = Regex("""\b([a-z]{3,}\s+){11,}[a-z]{3,}\b""", RegexOption.IGNORE_CASE)
+        val seedFields = listOf("d_pm", "d_2fa", "d_phone", "d_keys", "d_safe", "d_sim", "d_email")
+        val cryptoNameRe = Regex("""crypto|seed|wallet|mnemonic|recovery\s*phrase|ledger|trezor|bitcoin|btc|eth""", RegexOption.IGNORE_CASE)
+        val customCryptoValues = state.extra.values.flatten().flatMap { item ->
+            val name = "${item.label ?: ""} ${item.title ?: ""}"
+            if (!cryptoNameRe.containsMatchIn(name)) emptyList()
+            else if (item.type == "field") listOf(state.f[item.id] ?: "")
+            else (state.lists[item.id] ?: emptyList()).flatMap { it.values }
+        }
+        val hasSeed = cryptoRows.any { r -> r.values.any { seedRe.containsMatchIn(it) } } ||
+            seedFields.any { seedRe.containsMatchIn(f(it)) } ||
+            customCryptoValues.any { seedRe.containsMatchIn(it) }
+        if (hasSeed || cryptoRows.isNotEmpty()) {
             val missCrypto = cryptoRows.any { (it["access"] ?: "").trim().isEmpty() || (it["helper"] ?: "").trim().isEmpty() }
             when {
                 hasSeed -> items.add(AuditItem("crypto_safety", AuditSeverity.high, "Possible crypto seed phrase detected!", "Never store 12/24-word recovery seeds in this guide—write ONLY where the physical backup lives.", "money", "crypto"))
@@ -327,14 +389,16 @@ class GuideStore(
         }
 
         val govRows = rowsOf("gov_ids")
-        if (govRows.isNotEmpty()) {
-            val idRe = Regex("""\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b|\b\d{9,}\b""")
-            val hasFullId = govRows.any { r -> r.values.any { idRe.containsMatchIn(it) } }
-            if (hasFullId) {
-                items.add(AuditItem("gov_id_privacy", AuditSeverity.high, "Possible full SSN / National ID detected!", "Safety rule: enter ONLY the last 4 digits and where the original card lives.", "docs", "gov_ids"))
-            } else {
-                items.add(AuditItem("gov_id_privacy", AuditSeverity.ok, "Key IDs mapped safely (last 4 only)", "Government IDs record only last 4 digits and physical locations."))
-            }
+        val formattedIdRe = Regex("""\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b""")
+        val longDigitsRe = Regex("""\b\d{9,}\b""")
+        val hasFormattedIdAnywhere = state.f.values.any { formattedIdRe.containsMatchIn(it) } ||
+            state.lists.values.any { rows -> rows.any { r -> r.values.any { formattedIdRe.containsMatchIn(it) } } }
+        val hasLongGovLast4 = govRows.any { longDigitsRe.containsMatchIn(it["last4"] ?: "") }
+        val hasFullId = hasFormattedIdAnywhere || hasLongGovLast4
+        if (hasFullId) {
+            items.add(AuditItem("gov_id_privacy", AuditSeverity.high, "Possible full SSN / National ID detected!", "Safety rule: enter ONLY the last 4 digits and where the original card lives.", "docs", "gov_ids"))
+        } else if (govRows.isNotEmpty()) {
+            items.add(AuditItem("gov_id_privacy", AuditSeverity.ok, "Key IDs mapped safely (last 4 only)", "Government IDs record only last 4 digits and physical locations."))
         }
 
         if (f("q_life").isNotEmpty() || lifeRows.isNotEmpty()) {
@@ -488,8 +552,19 @@ class GuideStore(
         return MergePlan(newFields, conflicts, newTabs, newExtras, newRows, newChecks)
     }
 
+    private fun newerIso(a: String?, b: String?): String? {
+        if (a.isNullOrBlank()) return b?.takeIf { it.isNotBlank() }
+        if (b.isNullOrBlank()) return a
+        val ia = runCatching { OffsetDateTime.parse(a).toInstant() }.getOrElse { runCatching { Instant.parse(a) }.getOrNull() }
+        val ib = runCatching { OffsetDateTime.parse(b).toInstant() }.getOrElse { runCatching { Instant.parse(b) }.getOrNull() }
+        return when {
+            ia != null && ib != null -> if (ib.isAfter(ia)) b else a
+            else -> if (b > a) b else a
+        }
+    }
+
     fun applyMerge(inc: GuideState, overwriteConflicts: Boolean): String {
-        var addedF = 0; var updatedF = 0; var addedR = 0; var addedC = 0; var addedS = 0
+        var addedF = 0; var updatedF = 0; var addedR = 0; var addedC = 0; var addedS = 0; var addedP = 0
         val curTabs = state.customTabs.toMutableList()
         val curTabIds = curTabs.map { it.id }.toMutableSet()
         for (t in inc.customTabs) {
@@ -531,7 +606,35 @@ class GuideStore(
         for ((k, v) in inc.checks) {
             if (v && !(nextChecks[k] ?: false)) { nextChecks[k] = true; addedC++ }
         }
-        state = state.copy(customTabs = curTabs, extra = nextExtra, f = nextF, lists = nextLists, checks = nextChecks)
+        val safePhotoRe = Regex("""^data:image/(?:jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=]+$""")
+        val nextPhotos = state.photos.filter { safePhotoRe.matches(it.dataUrl) }.take(10).toMutableList()
+        val seenPhotoIds = nextPhotos.map { it.id }.toMutableSet()
+        val seenPhotoUrls = nextPhotos.map { it.dataUrl }.toMutableSet()
+        for (p in inc.photos) {
+            if (nextPhotos.size >= 10) break
+            if (!safePhotoRe.matches(p.dataUrl)) continue
+            if (seenPhotoIds.add(p.id) && seenPhotoUrls.add(p.dataUrl)) {
+                nextPhotos.add(p)
+                addedP++
+            }
+        }
+        val nextFireDrill = state.fireDrill.toMutableMap()
+        for ((k, v) in inc.fireDrill) {
+            if (v && !(nextFireDrill[k] ?: false)) { nextFireDrill[k] = true }
+        }
+        val nextLastDryRun = newerIso(state.lastDryRun, inc.lastDryRun)
+        val nextReviewed = newerIso(state.reviewed, inc.reviewed)
+        state = state.copy(
+            customTabs = curTabs,
+            extra = nextExtra,
+            f = nextF,
+            lists = nextLists,
+            checks = nextChecks,
+            photos = nextPhotos,
+            fireDrill = nextFireDrill,
+            lastDryRun = nextLastDryRun,
+            reviewed = nextReviewed
+        )
         normalize()
         save()
         val parts = listOfNotNull(
@@ -539,7 +642,8 @@ class GuideStore(
             if (updatedF > 0) "$updatedF updated" else null,
             if (addedR > 0) "+$addedR rows" else null,
             if (addedS > 0) "+$addedS sections" else null,
-            if (addedC > 0) "+$addedC checks" else null
+            if (addedC > 0) "+$addedC checks" else null,
+            if (addedP > 0) "+$addedP photos" else null
         )
         val msg = if (parts.isEmpty()) "Already up to date" else "Merged (${parts.joinToString(", ")})"
         statusToast = msg

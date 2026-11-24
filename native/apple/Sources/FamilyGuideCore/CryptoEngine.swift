@@ -124,12 +124,13 @@ public enum CryptoEngine: Sendable {
         return pkg
     }
 
-    public static func generatePassphrase(wordCount: Int = 5, words: [String]) -> String {
+    public static func generatePassphrase(wordCount: Int = 6, words: [String]) -> String {
         let pool = words.isEmpty ? ["maple", "river", "lantern", "cedar", "orbit"] : words
+        var rng = SystemRandomNumberGenerator()
         var picks: [String] = []
         picks.reserveCapacity(wordCount)
         for _ in 0..<wordCount {
-            let idx = Int(UInt32.random(in: 0..<UInt32(pool.count)))
+            let idx = Int.random(in: 0..<pool.count, using: &rng)
             picks.append(pool[idx])
         }
         return picks.joined(separator: "-")

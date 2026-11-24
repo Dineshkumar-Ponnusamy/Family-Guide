@@ -27,14 +27,23 @@ import io.github.dineshkumarponnusamy.familyfieldguide.core.*
 
 enum class SheetType { Summary, ErGrab, Readiness, Search, Backup, Restore, NewSection }
 
+private data class PendingRowDelete(
+    val listId: String,
+    val rowIdx: Int,
+    val keepOneBlank: Boolean,
+    val preview: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FamilyGuideScreen(
     store: GuideStore,
     revision: Int,
     isLocked: Boolean,
+    lockEnabled: Boolean = false,
     onRequestBiometricUnlock: () -> Unit,
     onLockNow: () -> Unit,
+    onDisableLock: () -> Unit = {},
     onShareText: (String, String) -> Unit,
     onExportBackupJson: (String) -> Unit,
     onPickBackupFile: ((String) -> Unit) -> Unit
@@ -44,6 +53,8 @@ fun FamilyGuideScreen(
     var activeSheet by remember { mutableStateOf<SheetType?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var regionMenuOpen by remember { mutableStateOf(false) }
+    var pendingDeleteSection by remember { mutableStateOf<CustomTab?>(null) }
+    var pendingDeleteRow by remember { mutableStateOf<PendingRowDelete?>(null) }
     val hc = store.state.highContrast
 
     if (isLocked) {
@@ -128,6 +139,12 @@ fun FamilyGuideScreen(
                                 }
                             )
                             HorizontalDivider()
+                            if (lockEnabled) {
+                                DropdownMenuItem(
+                                    text = { Text("✓ Auto-Lock on Leave (On)") },
+                                    onClick = { menuOpen = false; onDisableLock() }
+                                )
+                            }
                             DropdownMenuItem(text = { Text("Save Locked Backup") }, onClick = { menuOpen = false; activeSheet = SheetType.Backup })
                             DropdownMenuItem(text = { Text("Open / Merge Backup") }, onClick = { menuOpen = false; activeSheet = SheetType.Restore })
                         }
@@ -194,13 +211,25 @@ fun FamilyGuideScreen(
                     }
                     stdTab.blocks.forEach { block ->
                         item(key = "${stdTab.id}_${block.stableId}") {
-                            RenderBlock(store, block) { t, tr ->
-                                store.state = store.state.copy(
-                                    tab = t,
-                                    track = if (tr.isNotEmpty() && store.data.PLAYBOOK.containsKey(tr)) tr else store.state.track
-                                )
-                                store.save(touch = false)
-                            }
+                            RenderBlock(
+                                store = store,
+                                b = block,
+                                onRequestRowDelete = { listId, idx, keepOneBlank, row ->
+                                    val preview = row.values.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" · ").take(60)
+                                    if (preview.isNotEmpty()) {
+                                        pendingDeleteRow = PendingRowDelete(listId, idx, keepOneBlank, preview)
+                                    } else {
+                                        store.removeListRow(listId, idx, keepOneBlank)
+                                    }
+                                },
+                                onJump = { t, tr ->
+                                    store.state = store.state.copy(
+                                        tab = t,
+                                        track = if (tr.isNotEmpty() && store.data.PLAYBOOK.containsKey(tr)) tr else store.state.track
+                                    )
+                                    store.save(touch = false)
+                                }
+                            )
                         }
                     }
                     item { RenderExtras(store, stdTab.id, "More details") }
@@ -211,8 +240,8 @@ fun FamilyGuideScreen(
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text(ct.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                                 if (!store.state.readMode) {
-                                    TextButton(onClick = { store.deleteCustomSection(ct.id) }) {
-                                        Text("Delete", color = FfgColors.Tomato)
+                                    TextButton(onClick = { pendingDeleteSection = ct }) {
+                                        Text("Delete", color = FfgColors.TomatoInk)
                                     }
                                 }
                             }
@@ -251,6 +280,40 @@ fun FamilyGuideScreen(
         SheetType.NewSection -> NewSectionDialog(store, onDismiss = { activeSheet = null })
         null -> {}
     }
+
+    pendingDeleteRow?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteRow = null },
+            title = { Text("Remove this row?", fontWeight = FontWeight.Bold) },
+            text = { Text("Remove \"${pending.preview}\" from this list?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    store.removeListRow(pending.listId, pending.rowIdx, pending.keepOneBlank)
+                    pendingDeleteRow = null
+                }) { Text("Remove", color = FfgColors.TomatoInk) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteRow = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    pendingDeleteSection?.let { ct ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteSection = null },
+            title = { Text("Delete \"${ct.title}\"?", fontWeight = FontWeight.Bold) },
+            text = { Text("This will permanently remove this custom section and all entries inside it.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    store.deleteCustomSection(ct.id)
+                    pendingDeleteSection = null
+                }) { Text("Delete", color = FfgColors.TomatoInk) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteSection = null }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
@@ -274,7 +337,12 @@ private fun DemoBanner(store: GuideStore) {
 }
 
 @Composable
-private fun RenderBlock(store: GuideStore, b: BlockDef, onJump: (String, String) -> Unit) {
+private fun RenderBlock(
+    store: GuideStore,
+    b: BlockDef,
+    onRequestRowDelete: (String, Int, Boolean, Map<String, String>) -> Unit,
+    onJump: (String, String) -> Unit
+) {
     when (b.type) {
         "glance" -> {
             Surface(color = FfgColors.Ink, shape = RoundedCornerShape(10.dp), border = BorderStroke(2.dp, FfgColors.Tomato), modifier = Modifier.fillMaxWidth()) {
@@ -391,8 +459,8 @@ private fun RenderBlock(store: GuideStore, b: BlockDef, onJump: (String, String)
                             Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (editable) {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                        Text("✕", color = FfgColors.Tomato, modifier = Modifier.clickable {
-                                            store.removeListRow(bid, idx, b.crisisEditable == true)
+                                        Text("✕", color = FfgColors.TomatoInk, modifier = Modifier.clickable {
+                                            onRequestRowDelete(bid, idx, b.crisisEditable == true, rows[idx])
                                         })
                                     }
                                 }

@@ -182,8 +182,8 @@ public struct BackupSheetView: View {
                 Section("Passphrase (min 8 characters)") {
                     SecureField("Passphrase", text: $pw1)
                     SecureField("Confirm passphrase", text: $pw2)
-                    Button("Generate 5-word Diceware Passphrase") {
-                        let pw = CryptoEngine.generatePassphrase(wordCount: 5, words: store.data.DICE_WORDS)
+                    Button("Generate 6-word Diceware Passphrase") {
+                        let pw = CryptoEngine.generatePassphrase(wordCount: 6, words: store.data.DICE_WORDS)
                         pw1 = pw
                         pw2 = pw
                     }
@@ -232,7 +232,15 @@ public struct BackupSheetView: View {
                 document: BackupFileDocument(text: exportedJson ?? ""),
                 contentType: .json,
                 defaultFilename: "family-field-guide-backup.json"
-            ) { _ in }
+            ) { result in
+                switch result {
+                case .success:
+                    errMsg = nil
+                    store.statusToast = "Locked backup saved"
+                case .failure(let error):
+                    errMsg = "Could not save backup file: \(error.localizedDescription)"
+                }
+            }
         }
         .frame(minWidth: 520, minHeight: 440)
     }

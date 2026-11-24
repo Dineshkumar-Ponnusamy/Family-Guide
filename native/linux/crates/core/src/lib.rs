@@ -5,11 +5,13 @@ pub mod store;
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::fs;
 
     use crate::crypto::{
-        decrypt_state, encrypt_state, parse_backup_payload, sss_combine_2of3, sss_split_2of3,
+        decrypt_state, encrypt_state, generate_passphrase, parse_backup_payload, sss_combine_2of3,
+        sss_split_2of3,
     };
-    use crate::models::{AuditSeverity, GuideState};
+    use crate::models::{AuditSeverity, CustomTab, ExtraItem, GuideState, PhotoSnippet};
     use crate::store::GuideStore;
 
     #[test]
@@ -20,7 +22,7 @@ mod tests {
         assert_eq!(data.MONEY_GUIDE.len(), 6);
         assert_eq!(data.PRO_FINDER.len(), 5);
         assert_eq!(data.REGIONS.len(), 9);
-        assert_eq!(data.DICE_WORDS.len(), 256);
+        assert_eq!(data.DICE_WORDS.len(), 2048);
     }
 
     #[test]
@@ -208,5 +210,247 @@ mod tests {
         assert!(decoded.read_mode);
         assert!(decoded.large_text);
         assert!(decoded.high_contrast);
+    }
+
+    #[test]
+    fn apply_merge_merges_photos_fire_drill_and_newer_timestamps() {
+        let mut local = GuideStore::new_in_memory().unwrap();
+        local.state.fire_drill.insert("fd_unlock".to_string(), true);
+        local.state.last_dry_run = Some("2026-05-01T10:00:00Z".to_string());
+        local.state.reviewed = Some("2026-06-01T10:00:00Z".to_string());
+        local.state.photos.push(PhotoSnippet {
+            id: "p0".to_string(),
+            label: "Existing".to_string(),
+            data_url: "data:image/png;base64,AAAA".to_string(),
+        });
+
+        let mut incoming = GuideState::default();
+        incoming.fire_drill.insert("fd_papers".to_string(), true);
+        incoming.fire_drill.insert("fd_skip".to_string(), false);
+        incoming.last_dry_run = Some("2026-06-15T12:00:00Z".to_string()); // newer -> should win
+        incoming.reviewed = Some("2026-04-01T08:00:00Z".to_string()); // older -> should keep local
+
+        // Invalid photo URL, duplicate photo URL, and 11 valid unique photos (cap total at 10)
+        incoming.photos.push(PhotoSnippet {
+            id: "bad1".to_string(),
+            label: "XSS".to_string(),
+            data_url: "data:text/html;base64,PHNjcmlwdD4=".to_string(),
+        });
+        incoming.photos.push(PhotoSnippet {
+            id: "dup".to_string(),
+            label: "Duplicate".to_string(),
+            data_url: "data:image/png;base64,AAAA".to_string(),
+        });
+        for i in 1..=11 {
+            incoming.photos.push(PhotoSnippet {
+                id: format!("p{i}"),
+                label: format!("Photo {i}"),
+                data_url: format!("data:image/jpeg;base64,{}", "B".repeat(i * 4)),
+            });
+        }
+
+        local.apply_merge(&incoming, false);
+
+        assert_eq!(local.state.fire_drill.get("fd_unlock"), Some(&true));
+        assert_eq!(local.state.fire_drill.get("fd_papers"), Some(&true));
+        assert!(!local.state.fire_drill.contains_key("fd_skip"));
+        assert_eq!(
+            local.state.last_dry_run.as_deref(),
+            Some("2026-06-15T12:00:00Z")
+        );
+        assert_eq!(
+            local.state.reviewed.as_deref(),
+            Some("2026-06-01T10:00:00Z")
+        );
+        assert_eq!(local.state.photos.len(), 10);
+        assert!(local
+            .state
+            .photos
+            .iter()
+            .all(|p| p.data_url.starts_with("data:image/")));
+    }
+
+    #[test]
+    fn persistent_local_lock_and_corrupt_state_preservation() {
+        let dir = std::env::temp_dir().join(format!(
+            "ffg_linux_lock_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let state_path = dir.join("state.json");
+        let locked_path = dir.join("state.locked.json");
+        let corrupt_path = dir.join("state.json.corrupt");
+
+        // 1. Corrupt state.json is preserved to state.json.corrupt on load
+        fs::write(&state_path, b"{not valid json").unwrap();
+        let mut store = GuideStore::with_state_path(Some(state_path.clone())).unwrap();
+        assert!(corrupt_path.exists());
+        assert_eq!(fs::read(&corrupt_path).unwrap(), b"{not valid json");
+
+        // 2. Write plaintext state, then enable persistent encrypted local lock
+        store
+            .state
+            .f
+            .insert("q_first".to_string(), "Priya (+1-555-0102)".to_string());
+        store.save(true);
+        assert!(state_path.exists());
+        assert!(!store.is_locked_on_disk());
+
+        assert!(store.enable_local_lock("short").is_err());
+        store
+            .enable_local_lock("amber-cedar-lantern-orbit")
+            .expect("enable local lock succeeds");
+        assert!(locked_path.exists());
+        assert!(!state_path.exists());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&locked_path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+
+        // 3. lock_now clears RAM and leaves encrypted file on disk
+        store.lock_now();
+        assert!(store.state.f.is_empty());
+        assert!(store.active_lock_pass.is_none());
+        assert!(store.is_locked_on_disk());
+
+        // 4. Fresh store starts locked on disk with empty RAM state
+        let mut reloaded = GuideStore::with_state_path(Some(state_path.clone())).unwrap();
+        assert!(reloaded.is_locked_on_disk());
+        assert!(reloaded.state.f.is_empty());
+        assert!(reloaded.unlock_local_lock("wrong-passphrase").is_err());
+
+        reloaded
+            .unlock_local_lock("amber-cedar-lantern-orbit")
+            .expect("unlock succeeds");
+        assert_eq!(
+            reloaded.state.f.get("q_first").map(String::as_str),
+            Some("Priya (+1-555-0102)")
+        );
+
+        // Saving while unlocked with active lock updates state.locked.json without writing plaintext state.json
+        reloaded
+            .state
+            .f
+            .insert("q_binder".to_string(), "Top closet shelf".to_string());
+        reloaded.save(true);
+        assert!(locked_path.exists());
+        assert!(!state_path.exists());
+
+        // 5. disable_local_lock restores plaintext state.json and removes state.locked.json
+        reloaded.disable_local_lock().expect("disable succeeds");
+        assert!(state_path.exists());
+        assert!(!locked_path.exists());
+        assert!(!reloaded.is_locked_on_disk());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn full_state_privacy_audit_scans_fields_lists_and_custom_items() {
+        // 1. Formatted SSN in a general field (not gov_ids) is flagged even when gov_ids is empty
+        let mut s1 = GuideStore::new_in_memory().unwrap();
+        s1.state
+            .f
+            .insert("q_binder".to_string(), "Card with 123-45-6789 inside".to_string());
+        let a1 = s1.compute_audit();
+        assert_eq!(
+            a1.iter().find(|a| a.id == "gov_id_privacy").unwrap().sev,
+            AuditSeverity::High
+        );
+
+        // 2. Formatted Aadhaar in another list is flagged; 10-digit phone in state.f is NOT flagged
+        let mut s2 = GuideStore::new_in_memory().unwrap();
+        s2.state
+            .f
+            .insert("q_first".to_string(), "9876543210".to_string());
+        assert!(s2
+            .compute_audit()
+            .iter()
+            .find(|a| a.id == "gov_id_privacy")
+            .is_none());
+
+        let mut row = HashMap::new();
+        row.insert("inst".to_string(), "HDFC 1234-5678-9012".to_string());
+        s2.state.lists.insert("accounts".to_string(), vec![row]);
+        assert_eq!(
+            s2.compute_audit()
+                .iter()
+                .find(|a| a.id == "gov_id_privacy")
+                .unwrap()
+                .sev,
+            AuditSeverity::High
+        );
+
+        // 3. 9+ raw digits on gov_ids.last4 specifically is flagged
+        let mut s3 = GuideStore::new_in_memory().unwrap();
+        let mut gid = HashMap::new();
+        gid.insert("idtype".to_string(), "SSN".to_string());
+        gid.insert("last4".to_string(), "123456789".to_string());
+        s3.state.lists.insert("gov_ids".to_string(), vec![gid]);
+        assert_eq!(
+            s3.compute_audit()
+                .iter()
+                .find(|a| a.id == "gov_id_privacy")
+                .unwrap()
+                .sev,
+            AuditSeverity::High
+        );
+
+        // 4. 12-word seed phrase in d_pm and in a crypto-named custom item
+        let seed = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima";
+        let mut s4 = GuideStore::new_in_memory().unwrap();
+        s4.state.f.insert("d_pm".to_string(), seed.to_string());
+        assert_eq!(
+            s4.compute_audit()
+                .iter()
+                .find(|a| a.id == "crypto_safety")
+                .unwrap()
+                .sev,
+            AuditSeverity::High
+        );
+
+        let mut s5 = GuideStore::new_in_memory().unwrap();
+        s5.state.custom_tabs.push(CustomTab {
+            id: "tab_custom".to_string(),
+            label: "Assets".to_string(),
+            title: "Assets".to_string(),
+        });
+        s5.state.extra.insert(
+            "tab_custom".to_string(),
+            vec![ExtraItem {
+                item_type: "field".to_string(),
+                id: "x_wallet".to_string(),
+                label: Some("Hardware Wallet Notes".to_string()),
+                title: None,
+                wide: Some(true),
+                cols: None,
+            }],
+        );
+        s5.state.f.insert("x_wallet".to_string(), seed.to_string());
+        assert_eq!(
+            s5.compute_audit()
+                .iter()
+                .find(|a| a.id == "crypto_safety")
+                .unwrap()
+                .sev,
+            AuditSeverity::High
+        );
+    }
+
+    #[test]
+    fn diceware_passphrase_uses_word_pool() {
+        let data = GuideStore::load_embedded_data().unwrap();
+        let phrase = generate_passphrase(&data.DICE_WORDS, 6);
+        let words: Vec<&str> = phrase.split('-').collect();
+        assert_eq!(words.len(), 6);
+        for w in words {
+            assert!(data.DICE_WORDS.iter().any(|dw| dw == w));
+        }
     }
 }

@@ -21,7 +21,7 @@ public class FamilyGuideCoreTests
         Assert.Equal(6, store.Data.MONEY_GUIDE.Count);
         Assert.Equal(5, store.Data.PRO_FINDER.Count);
         Assert.Equal(9, store.Data.REGIONS.Count);
-        Assert.Equal(256, store.Data.DICE_WORDS.Count);
+        Assert.Equal(2048, store.Data.DICE_WORDS.Count);
         Assert.NotNull(store.Data.REGIONS["us_in"].moneyGuide);
         Assert.NotNull(store.Data.REGIONS["in"].proFinder);
     }
@@ -151,5 +151,134 @@ public class FamilyGuideCoreTests
         Assert.True(reloaded.State.readMode);
         Assert.True(reloaded.State.largeText);
         Assert.True(reloaded.State.highContrast);
+    }
+
+    [Fact]
+    public void ApplyMergeHandlesPhotosFireDrillAndIsoTimestamps()
+    {
+        var store = CreateTempStore();
+        store.State.photos.Add(new PhotoSnippet { id = "p1", label = "Existing", dataUrl = "data:image/png;base64,AAAA" });
+        store.State.fireDrill["fd1"] = true;
+        store.State.lastDryRun = "2026-04-01T10:00:00Z";
+        store.State.reviewed = "2026-05-10T12:00:00Z";
+
+        var inc = new GuideState
+        {
+            photos = new()
+            {
+                new PhotoSnippet { id = "p1-dup", label = "DupDataUrl", dataUrl = "data:image/png;base64,AAAA" },
+                new PhotoSnippet { id = "p1", label = "DupId", dataUrl = "data:image/png;base64,BBBB" },
+                new PhotoSnippet { id = "bad-svg", label = "BadSvg", dataUrl = "data:image/svg+xml;base64,PHN2Zz4=" },
+                new PhotoSnippet { id = "bad-js", label = "BadJs", dataUrl = "javascript:alert(1)" },
+            },
+            fireDrill = new() { ["fd1"] = false, ["fd2"] = true },
+            lastDryRun = "2026-06-01T10:00:00Z",
+            reviewed = "2026-03-01T10:00:00Z"
+        };
+        for (int i = 0; i < 12; i++)
+            inc.photos.Add(new PhotoSnippet { id = $"v{i}", label = $"Valid {i}", dataUrl = $"data:image/jpeg;base64,ABCD{i:D2}==" });
+
+        store.ApplyMerge(inc, overwriteConflicts: false);
+
+        Assert.Equal(10, store.State.photos.Count);
+        Assert.DoesNotContain(store.State.photos, p => p.id is "p1-dup" or "bad-svg" or "bad-js");
+        Assert.Equal("Existing", store.State.photos.First(p => p.id == "p1").label);
+        Assert.True(store.State.fireDrill["fd1"]);
+        Assert.True(store.State.fireDrill["fd2"]);
+        Assert.Equal("2026-06-01T10:00:00Z", store.State.lastDryRun);
+        Assert.Equal("2026-05-10T12:00:00Z", store.State.reviewed);
+    }
+
+    [Fact]
+    public void LocalLockEnableLockNowUnlockAndDisableRoundTrip()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "ffg-win-lock-" + Guid.NewGuid().ToString("N"));
+        string statePath = Path.Combine(dir, "state.json");
+        string lockedPath = Path.Combine(dir, "state.locked.json");
+        const string pw = "amber-cedar-harbor-lantern-orbit-river";
+
+        var store = new GuideStore(dir);
+        store.State.f["q_first"] = "Priya Sharma · 206-555-0148";
+        store.Save(touch: false);
+        Assert.True(File.Exists(statePath));
+
+        store.EnableLocalLock(pw);
+        Assert.True(File.Exists(lockedPath));
+        Assert.False(File.Exists(statePath));
+        Assert.True(store.IsLockedOnDisk);
+
+        store.LockNow();
+        Assert.False(store.State.f.ContainsKey("q_first"));
+        Assert.True(store.IsLockedOnDisk);
+
+        var restarted = new GuideStore(dir);
+        Assert.True(restarted.IsLockedOnDisk);
+        Assert.False(restarted.State.f.ContainsKey("q_first"));
+        Assert.False(restarted.UnlockLocalLock("wrong-passphrase"));
+        Assert.True(restarted.UnlockLocalLock(pw));
+        Assert.Equal("Priya Sharma · 206-555-0148", restarted.State.f["q_first"]);
+
+        restarted.State.f["d_phone"] = "Face ID + PIN in safe";
+        restarted.Save();
+        Assert.True(File.Exists(lockedPath));
+        Assert.False(File.Exists(statePath));
+
+        restarted.DisableLocalLock();
+        Assert.False(restarted.IsLockedOnDisk);
+        Assert.True(File.Exists(statePath));
+        Assert.False(File.Exists(lockedPath));
+    }
+
+    [Fact]
+    public void FullStatePrivacyAuditCatchesIdsAndSeedsAcrossFieldsListsAndCustomItems()
+    {
+        var store = CreateTempStore();
+        store.State.f["letter"] = "My SSN is 123-45-6789 in case needed.";
+        var audit = store.ComputeAudit();
+        Assert.Equal(AuditSeverity.high, audit.First(x => x.id == "gov_id_privacy").sev);
+
+        store = CreateTempStore();
+        store.State.lists["accounts"] = new() { new() { ["inst"] = "HDFC 1234 5678 9012" } };
+        audit = store.ComputeAudit();
+        Assert.Equal(AuditSeverity.high, audit.First(x => x.id == "gov_id_privacy").sev);
+
+        store = CreateTempStore();
+        store.State.lists["gov_ids"] = new() { new() { ["who"] = "Me", ["idtype"] = "SSN", ["last4"] = "123456789" } };
+        audit = store.ComputeAudit();
+        Assert.Equal(AuditSeverity.high, audit.First(x => x.id == "gov_id_privacy").sev);
+
+        const string seed12 = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima";
+        foreach (string fid in new[] { "d_pm", "d_2fa", "d_phone", "d_keys", "d_safe", "d_sim", "d_email" })
+        {
+            store = CreateTempStore();
+            store.State.f[fid] = seed12;
+            audit = store.ComputeAudit();
+            Assert.Equal(AuditSeverity.high, audit.First(x => x.id == "crypto_safety").sev);
+        }
+
+        store = CreateTempStore();
+        store.State.customTabs.Add(new CustomTab { id = "tab_c1", label = "Vault", title = "Vault" });
+        store.State.extra["tab_c1"] = new() { new ExtraItem { type = "field", id = "x_seed", label = "Crypto Backup Notes" } };
+        store.State.f["x_seed"] = seed12;
+        audit = store.ComputeAudit();
+        Assert.Equal(AuditSeverity.high, audit.First(x => x.id == "crypto_safety").sev);
+    }
+
+    [Fact]
+    public void CorruptStateBackedUpAndDicewareDefaultsToSixWords()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "ffg-win-corrupt-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        string statePath = Path.Combine(dir, "state.json");
+        string corruptPath = Path.Combine(dir, "state.json.corrupt");
+        File.WriteAllText(statePath, "{ not valid json");
+
+        var store = new GuideStore(dir);
+        Assert.True(File.Exists(corruptPath));
+        Assert.Equal("{ not valid json", File.ReadAllText(corruptPath));
+        Assert.False(store.HasAnyContent);
+
+        string pass = CryptoEngine.GeneratePassphrase(store.Data.DICE_WORDS);
+        Assert.Equal(6, pass.Split('-').Length);
     }
 }

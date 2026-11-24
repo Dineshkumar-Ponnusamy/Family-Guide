@@ -1,0 +1,64 @@
+name: Bug Report
+description: Report a bug in the Web PWA, standalone .html backup, or native apps
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > **PRIVACY & SAFETY REMINDER:**
+        > **NEVER attach backup files (`family-field-guide-*.json` / `.html`), recovery cards (`FFG-1-...`), screenshots of real family data, or personal IDs (SSN, Aadhaar, Passport, or account numbers).**
+        > Use the built-in **Load sample family** button before taking screenshots.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which app or environment did you see this issue on?
+      options:
+        - Web PWA (GitHub Pages / browser)
+        - Standalone .html backup
+        - macOS (SwiftUI)
+        - iOS (SwiftUI)
+        - Android (Kotlin / Compose)
+        - Windows (WPF)
+        - Linux (GTK4)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: App version / OS / Browser
+      description: Release tag or commit, OS version, and browser (if Web)
+      placeholder: "e.g. v1.0.0, macOS 15.1, Safari 18"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Please describe the exact steps (using sample family data only).
+      placeholder: |
+        1. Click 'Load sample family'
+        2. Open '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected vs. actual behavior
+      description: What did you expect to happen, and what happened instead?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: privacy_check
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I confirm this report contains NO real family details, backup files, recovery cards, or personal IDs.
+          required: true

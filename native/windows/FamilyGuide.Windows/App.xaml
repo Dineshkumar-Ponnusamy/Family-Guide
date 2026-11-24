@@ -8,9 +8,12 @@
         <SolidColorBrush x:Key="CardBrush" Color="#FFFDF8" />
         <SolidColorBrush x:Key="InkBrush" Color="#1F3A2E" />
         <SolidColorBrush x:Key="Ink2Brush" Color="#4B5F55" />
-        <SolidColorBrush x:Key="MuteBrush" Color="#8A8F84" />
+        <Color x:Key="MuteColor">#5D6359</Color>
+        <SolidColorBrush x:Key="MuteBrush" Color="{StaticResource MuteColor}" />
         <SolidColorBrush x:Key="RuleBrush" Color="#D9CFB9" />
         <SolidColorBrush x:Key="TomatoBrush" Color="#D2512F" />
+        <Color x:Key="TomatoInkColor">#B3381A</Color>
+        <SolidColorBrush x:Key="TomatoInkBrush" Color="{StaticResource TomatoInkColor}" />
         <SolidColorBrush x:Key="SunBrush" Color="#E9B44C" />
         <SolidColorBrush x:Key="SkyBrush" Color="#4F7C8A" />
         <SolidColorBrush x:Key="AlertBgBrush" Color="#FFF5F2" />

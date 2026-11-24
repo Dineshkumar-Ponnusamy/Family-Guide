@@ -1,0 +1,68 @@
+name: Country / Region Preset Request
+description: Propose or update a localized country or cross-border preset in regions.js
+title: "[Region]: "
+labels: ["region-preset"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > **PRIVACY & SAFETY REMINDER:**
+        > **NEVER attach backup files (`family-field-guide-*.json` / `.html`), recovery cards (`FFG-1-...`), screenshots of real family data, or personal IDs.**
+        > Region presets contain general educational guidance only — never personal or client details.
+
+  - type: input
+    id: region_name
+    attributes:
+      label: Country / Region Name & Key
+      description: Display name and proposed short key in REGIONS (e.g. "Singapore (sg)")
+      placeholder: "e.g. Singapore (sg)"
+    validations:
+      required: true
+
+  - type: input
+    id: emergency_currency
+    attributes:
+      label: Emergency Number & Currency Symbol
+      placeholder: "e.g. 995 / 999 · S$"
+    validations:
+      required: true
+
+  - type: textarea
+    id: money_guide
+    attributes:
+      label: Localized Money Guide Details
+      description: Bank deposit-insurance cap, general tax/estate notes, fee-only fiduciary credential, and safe liquid cash options.
+      placeholder: |
+        - Deposit cap: ...
+        - Tax / estate note: ...
+        - Fee-only fiduciary credential: ...
+        - Safe cash parking: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: pro_finder
+    attributes:
+      label: Vetted & Low-Cost Directories (proFinder)
+      description: Official bar referral / legal aid, immigration regulator, fee-only advisor directory, and tax / free aid resources.
+    validations:
+      required: true
+
+  - type: textarea
+    id: sources
+    attributes:
+      label: Official Verification Sources & Date
+      description: "Links to official government/regulator pages and the verification date (`lastVerified: YYYY-MM-DD`)."
+      placeholder: "Verified 2026-11-24 against ..."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I confirm this submission contains NO personal data, backup files, or personal IDs.
+          required: true
+        - label: I understand presets provide general educational organization guidance only, not legal, tax, or financial advice.
+          required: true

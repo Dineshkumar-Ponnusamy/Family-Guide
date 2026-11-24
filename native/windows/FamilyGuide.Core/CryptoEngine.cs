@@ -104,9 +104,13 @@ public static class CryptoEngine
         return htmlPkg;
     }
 
+    public static string GeneratePassphrase(IReadOnlyList<string> words, int wordCount = 6) =>
+        GeneratePassphrase(wordCount, words);
+
     public static string GeneratePassphrase(int wordCount, IReadOnlyList<string> words)
     {
-        IReadOnlyList<string> pool = words.Count > 0 ? words : new[] { "maple", "river", "lantern", "cedar", "orbit" };
+        if (wordCount <= 0) wordCount = 6;
+        IReadOnlyList<string> pool = words.Count > 0 ? words : new[] { "maple", "river", "lantern", "cedar", "orbit", "harbor" };
         var picks = new string[wordCount];
         for (int i = 0; i < wordCount; i++)
             picks[i] = pool[RandomNumberGenerator.GetInt32(pool.Count)];

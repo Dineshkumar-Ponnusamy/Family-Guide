@@ -8,6 +8,9 @@ my-sections.json
 gitignore.txt
 *.backup.json
 .DS_Store
+.vscode/
+__pycache__/
+*.pyc
 
 # Pure native Apple (SwiftPM / Xcode) build artifacts
 native/apple/.build/

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -7,11 +8,31 @@ namespace FamilyGuide.Core;
 public sealed class GuideStore
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
+    private static readonly Regex PhotoDataUrlRx = new(
+        @"^data:image/(?:jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=]+$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex SeedPhraseRx = new(
+        @"\b([a-z]{3,}\s+){11,}[a-z]{3,}\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex FormattedGovIdRx = new(
+        @"\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b",
+        RegexOptions.Compiled);
+    private static readonly Regex LongDigitsRx = new(
+        @"\b\d{9,}\b",
+        RegexOptions.Compiled);
+    private static readonly string[] SeedSensitiveFieldIds =
+        { "d_pm", "d_2fa", "d_phone", "d_keys", "d_safe", "d_sim", "d_email" };
+
     private readonly string _statePath;
+    private readonly string _lockedPath;
+    private readonly string _corruptPath;
+    private string? _activeLockPassphrase;
 
     public GuideData Data { get; }
     public GuideState State { get; set; }
     public string? StatusToast { get; set; }
+    public bool IsLockedOnDisk => File.Exists(_lockedPath) && !File.Exists(_statePath);
+    public bool HasLocalLock => _activeLockPassphrase != null || File.Exists(_lockedPath);
     public event Action? StateChanged;
 
     public GuideStore(string? storageDirectory = null)
@@ -26,15 +47,27 @@ public sealed class GuideStore
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FamilyFieldGuide");
         Directory.CreateDirectory(dir);
         _statePath = Path.Combine(dir, "state.json");
+        _lockedPath = Path.Combine(dir, "state.locked.json");
+        _corruptPath = Path.Combine(dir, "state.json.corrupt");
 
-        if (File.Exists(_statePath))
+        if (!IsLockedOnDisk && File.Exists(_statePath))
         {
             try
             {
-                State = JsonSerializer.Deserialize<GuideState>(File.ReadAllText(_statePath)) ?? new GuideState();
+                var loaded = JsonSerializer.Deserialize<GuideState>(File.ReadAllText(_statePath));
+                if (loaded == null)
+                {
+                    TryBackupCorruptState();
+                    State = new GuideState();
+                }
+                else
+                {
+                    State = loaded;
+                }
             }
             catch
             {
+                TryBackupCorruptState();
                 State = new GuideState();
             }
         }
@@ -45,14 +78,92 @@ public sealed class GuideStore
         Normalize();
     }
 
+    private void TryBackupCorruptState()
+    {
+        try
+        {
+            if (File.Exists(_statePath))
+                File.Copy(_statePath, _corruptPath, overwrite: true);
+        }
+        catch { }
+    }
+
     public void Save(bool touch = true)
     {
+        if (IsLockedOnDisk && _activeLockPassphrase == null) return;
         if (touch) State.updated = DateTime.UtcNow.ToString("O");
         try
         {
-            File.WriteAllText(_statePath, JsonSerializer.Serialize(State, JsonOpts));
+            if (_activeLockPassphrase != null)
+            {
+                var pkg = CryptoEngine.Encrypt(State, _activeLockPassphrase);
+                string tmpLocked = _lockedPath + ".tmp";
+                File.WriteAllText(tmpLocked, JsonSerializer.Serialize(pkg, JsonOpts));
+                File.Move(tmpLocked, _lockedPath, overwrite: true);
+                if (File.Exists(_statePath))
+                    File.Delete(_statePath);
+            }
+            else
+            {
+                string tmpState = _statePath + ".tmp";
+                File.WriteAllText(tmpState, JsonSerializer.Serialize(State, JsonOpts));
+                File.Move(tmpState, _statePath, overwrite: true);
+            }
         }
         catch { }
+        StateChanged?.Invoke();
+    }
+
+    public void EnableLocalLock(string passphrase)
+    {
+        if (string.IsNullOrEmpty(passphrase))
+            throw new ArgumentException("Passphrase cannot be empty.", nameof(passphrase));
+        _activeLockPassphrase = passphrase;
+        Save(touch: false);
+    }
+
+    public bool UnlockLocalLock(string passphrase)
+    {
+        if (string.IsNullOrEmpty(passphrase) || !File.Exists(_lockedPath))
+            return false;
+        try
+        {
+            var pkg = CryptoEngine.ParseBackupPayload(File.ReadAllText(_lockedPath));
+            var decrypted = CryptoEngine.Decrypt(pkg, passphrase);
+            _activeLockPassphrase = passphrase;
+            State = decrypted;
+            Normalize();
+            StateChanged?.Invoke();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public void DisableLocalLock()
+    {
+        if (IsLockedOnDisk && _activeLockPassphrase == null) return;
+        _activeLockPassphrase = null;
+        try
+        {
+            string tmpState = _statePath + ".tmp";
+            File.WriteAllText(tmpState, JsonSerializer.Serialize(State, JsonOpts));
+            File.Move(tmpState, _statePath, overwrite: true);
+            if (File.Exists(_lockedPath))
+                File.Delete(_lockedPath);
+        }
+        catch { }
+        StateChanged?.Invoke();
+    }
+
+    public void LockNow()
+    {
+        if (_activeLockPassphrase != null)
+            Save(touch: false);
+        _activeLockPassphrase = null;
+        State = new GuideState();
         StateChanged?.Invoke();
     }
 
@@ -321,23 +432,42 @@ public sealed class GuideStore
         else items.Add(new AuditItem("beneficiaries", AuditSeverity.ok, "Beneficiaries recorded", "Listed life insurance & retirement entries name a beneficiary." + indiaNote));
 
         var cryptoRows = RowsOf("crypto");
-        if (cryptoRows.Count > 0)
+        bool hasSeedInCrypto = cryptoRows.Any(r => r.Values.Any(v => SeedPhraseRx.IsMatch(v)));
+        bool hasSeedInFields = SeedSensitiveFieldIds.Any(fid =>
+            State.f.TryGetValue(fid, out var fv) && !string.IsNullOrWhiteSpace(fv) && SeedPhraseRx.IsMatch(fv));
+        bool hasSeedInCustom = State.extra.Values.SelectMany(x => x).Any(x =>
         {
-            bool hasSeed = cryptoRows.Any(r => r.Values.Any(v => Regex.IsMatch(v, @"\b([a-z]{3,}\s+){11,}[a-z]{3,}\b", RegexOptions.IgnoreCase)));
+            string itemName = (x.label ?? "") + " " + (x.title ?? "");
+            if (!Regex.IsMatch(itemName, @"crypto|seed|wallet|ledger|trezor|mnemonic", RegexOptions.IgnoreCase))
+                return false;
+            if (x.type == "field")
+                return State.f.TryGetValue(x.id, out var fv) && !string.IsNullOrWhiteSpace(fv) && SeedPhraseRx.IsMatch(fv);
+            return State.lists.TryGetValue(x.id, out var lrows)
+                && lrows.Any(r => r.Values.Any(v => !string.IsNullOrWhiteSpace(v) && SeedPhraseRx.IsMatch(v)));
+        });
+        bool hasSeed = hasSeedInCrypto || hasSeedInFields || hasSeedInCustom;
+
+        if (hasSeed)
+        {
+            items.Add(new AuditItem("crypto_safety", AuditSeverity.high, "Possible crypto seed phrase detected!", "Never store 12/24-word recovery seeds in this guide—write ONLY where the physical backup lives.", "money", "crypto"));
+        }
+        else if (cryptoRows.Count > 0)
+        {
             bool missCrypto = cryptoRows.Any(r => !r.TryGetValue("access", out var a) || string.IsNullOrWhiteSpace(a) || !r.TryGetValue("helper", out var h) || string.IsNullOrWhiteSpace(h));
-            if (hasSeed) items.Add(new AuditItem("crypto_safety", AuditSeverity.high, "Possible crypto seed phrase detected!", "Never store 12/24-word recovery seeds in this guide—write ONLY where the physical backup lives.", "money", "crypto"));
-            else if (missCrypto) items.Add(new AuditItem("crypto_safety", AuditSeverity.med, "Crypto entry missing recovery location or helper", "Record where the seed/hardware wallet is stored and a trusted helper.", "money", "crypto"));
+            if (missCrypto) items.Add(new AuditItem("crypto_safety", AuditSeverity.med, "Crypto entry missing recovery location or helper", "Record where the seed/hardware wallet is stored and a trusted helper.", "money", "crypto"));
             else items.Add(new AuditItem("crypto_safety", AuditSeverity.ok, "Crypto recovery map documented (no raw seeds)", "Holdings, storage locations, and trusted helper instructions are recorded."));
         }
 
         var govRows = RowsOf("gov_ids");
-        if (govRows.Count > 0)
-        {
-            bool hasFullId = govRows.Any(r => r.Values.Any(v => Regex.IsMatch(v, @"\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b|\b\d{9,}\b")));
-            items.Add(hasFullId
-                ? new AuditItem("gov_id_privacy", AuditSeverity.high, "Possible full SSN / National ID detected!", "Safety rule: enter ONLY the last 4 digits and where the original card lives.", "docs", "gov_ids")
-                : new AuditItem("gov_id_privacy", AuditSeverity.ok, "Key IDs mapped safely (last 4 only)", "Government IDs record only last 4 digits and physical locations."));
-        }
+        bool hasFormattedIdInFields = State.f.Values.Any(v => !string.IsNullOrWhiteSpace(v) && FormattedGovIdRx.IsMatch(v));
+        bool hasFormattedIdInLists = State.lists.Values.SelectMany(rs => rs).Any(r => r.Values.Any(v => !string.IsNullOrWhiteSpace(v) && FormattedGovIdRx.IsMatch(v)));
+        bool hasLongDigitsInGovLast4 = govRows.Any(r => r.TryGetValue("last4", out var l4) && !string.IsNullOrWhiteSpace(l4) && LongDigitsRx.IsMatch(l4));
+        bool hasFullId = hasFormattedIdInFields || hasFormattedIdInLists || hasLongDigitsInGovLast4;
+
+        if (hasFullId)
+            items.Add(new AuditItem("gov_id_privacy", AuditSeverity.high, "Possible full SSN / National ID detected!", "Safety rule: enter ONLY the last 4 digits and where the original card lives.", "docs", "gov_ids"));
+        else if (govRows.Count > 0)
+            items.Add(new AuditItem("gov_id_privacy", AuditSeverity.ok, "Key IDs mapped safely (last 4 only)", "Government IDs record only last 4 digits and physical locations."));
 
         if (!string.IsNullOrEmpty(F("q_life")) || lifeRows.Count > 0)
         {
@@ -499,9 +629,21 @@ public sealed class GuideStore
         return new MergePlan(newFields, conflicts, newTabs, newExtras, newRows, newChecks);
     }
 
+    private static string? NewerIso(string? current, string? incoming)
+    {
+        if (string.IsNullOrWhiteSpace(incoming)) return current;
+        if (string.IsNullOrWhiteSpace(current)) return incoming;
+        bool curOk = DateTimeOffset.TryParse(current, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var curDt);
+        bool incOk = DateTimeOffset.TryParse(incoming, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var incDt);
+        if (curOk && incOk) return incDt > curDt ? incoming : current;
+        if (incOk) return incoming;
+        if (curOk) return current;
+        return string.CompareOrdinal(incoming, current) > 0 ? incoming : current;
+    }
+
     public string ApplyMerge(GuideState inc, bool overwriteConflicts)
     {
-        int addedF = 0, updatedF = 0, addedR = 0, addedC = 0, addedS = 0;
+        int addedF = 0, updatedF = 0, addedR = 0, addedC = 0, addedS = 0, addedP = 0, addedFd = 0;
         var curTabIds = State.customTabs.Select(c => c.id).ToHashSet();
         foreach (var t in inc.customTabs)
             if (curTabIds.Add(t.id)) { State.customTabs.Add(new CustomTab { id = t.id, label = t.label, title = t.title }); addedS++; }
@@ -542,6 +684,24 @@ public sealed class GuideStore
         foreach (var (k, v) in inc.checks)
             if (v && !(State.checks.TryGetValue(k, out var cv) && cv)) { State.checks[k] = true; addedC++; }
 
+        var photoIds = State.photos.Select(p => p.id).Where(id => !string.IsNullOrEmpty(id)).ToHashSet();
+        var photoDataUrls = State.photos.Select(p => p.dataUrl).Where(u => !string.IsNullOrEmpty(u)).ToHashSet();
+        foreach (var p in inc.photos)
+        {
+            if (State.photos.Count >= 10) break;
+            if (string.IsNullOrWhiteSpace(p.dataUrl) || !PhotoDataUrlRx.IsMatch(p.dataUrl)) continue;
+            if (!photoDataUrls.Add(p.dataUrl)) continue;
+            if (!string.IsNullOrEmpty(p.id) && !photoIds.Add(p.id)) continue;
+            State.photos.Add(new PhotoSnippet { id = p.id, label = p.label, dataUrl = p.dataUrl });
+            addedP++;
+        }
+
+        foreach (var (k, v) in inc.fireDrill)
+            if (v && !(State.fireDrill.TryGetValue(k, out var fv) && fv)) { State.fireDrill[k] = true; addedFd++; }
+
+        State.lastDryRun = NewerIso(State.lastDryRun, inc.lastDryRun);
+        State.reviewed = NewerIso(State.reviewed, inc.reviewed);
+
         Normalize();
         Save();
         var parts = new List<string>();
@@ -550,6 +710,8 @@ public sealed class GuideStore
         if (addedR > 0) parts.Add($"+{addedR} rows");
         if (addedS > 0) parts.Add($"+{addedS} sections");
         if (addedC > 0) parts.Add($"+{addedC} checks");
+        if (addedP > 0) parts.Add($"+{addedP} photos");
+        if (addedFd > 0) parts.Add($"+{addedFd} fire-drill");
         string msg = parts.Count == 0 ? "Already up to date" : $"Merged ({string.Join(", ", parts)})";
         StatusToast = msg;
         return msg;

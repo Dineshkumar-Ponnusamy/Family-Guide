@@ -1,4 +1,4 @@
-/* Dual Node.js + JavaScriptCore (jsc) automated test suite for Our Family Field Guide Web App */
+/* Automated test suite for Our Family Field Guide Web App (Node.js) */
 const isNode = typeof process !== "undefined" && !!(process.versions && process.versions.node);
 const outPrint = typeof print === "function" ? print : console.log;
 
@@ -211,5 +211,90 @@ delete window.navigator;
 assert(safeImgUrl("javascript:alert(1)") === "", "reject javascript URI in photo");
 assert(safeImgUrl("data:text/html;base64,PHNjcmlwdD4=") === "", "reject html data URI in photo");
 assert(safeImgUrl("data:image/jpeg;base64,/9j/4AAQ") === "data:image/jpeg;base64,/9j/4AAQ", "accept valid image data URI");
+
+// 11. 2048-word Diceware, fail-closed CSPRNG, sanitization & full-state audit
+assert(DICE_WORDS.length === 2048 && new Set(DICE_WORDS).size === 2048, "2048 unique DICE_WORDS");
+let threwNoCrypto = false;
+try { generatePassphrase(6); } catch { threwNoCrypto = true; }
+assert(threwNoCrypto, "generatePassphrase fails closed without CSPRNG");
+threwNoCrypto = false;
+try { sssSplit2of3("test-secret"); } catch { threwNoCrypto = true; }
+assert(threwNoCrypto, "sssSplit2of3 fails closed without CSPRNG");
+
+globalThis.crypto = {
+  getRandomValues(arr) {
+    for (let i = 0; i < arr.length; i++) arr[i] = (i * 137 + 42) & 0xff;
+    return arr;
+  }
+};
+const pw6 = generatePassphrase(6);
+assert(pw6.split("-").length === 6, "6-word passphrase generated");
+const splitShares = sssSplit2of3(pw6);
+assert(splitShares.length === 3 && sssCombine2of3(splitShares[0], splitShares[2]) === pw6, "Shamir round-trip with 6-word passphrase");
+delete globalThis.crypto;
+
+const polluted = JSON.parse('{"__proto__":{"polluted":true},"f":{"m_first":"123-45-6789","d_pm":"one two three four five six seven eight nine ten eleven twelve","letter":"one two three four five six seven eight nine ten eleven twelve thirteen"},"photos":[{"id":"p1","label":"bad","dataUrl":"javascript:alert(1)"},{"id":"p2","label":"ok","dataUrl":"data:image/png;base64,AAAA"}]}');
+const sanitized = sanitizeState(polluted);
+assert(!Object.prototype.hasOwnProperty.call(sanitized, "__proto__") && !({}).polluted, "prototype pollution stripped");
+assert(sanitized.photos.length === 1 && sanitized.photos[0].id === "p2", "unsafe photo stripped on sanitizeState");
+
+S = sanitized; norm();
+audit = computeAudit();
+assert(audit.find(x => x.id === "gov_id_privacy")?.sev === "high", "catch full SSN in non-gov_ids field");
+assert(audit.find(x => x.id === "crypto_safety")?.sev === "high", "catch 12-word seed in d_pm");
+S.f.m_first = "Keep checking funded";
+S.f.d_pm = "Bitwarden Emergency Kit in safe";
+S.lists.gov_ids = [{ who: "Me", idtype: "Passport", last4: "1234", where: "Safe" }];
+audit = computeAudit();
+assert(audit.find(x => x.id === "crypto_safety") === undefined, "letter prose does not false-positive as seed");
+assert(audit.find(x => x.id === "gov_id_privacy")?.sev === "ok", "clean gov_ids passes");
+
+// 12. applyMerge photo filtering, fireDrill, timestamps & Caregiver subset
+const mergeTarget = sanitizeState({ f: {}, lists: {}, photos: [] });
+const mergeIncoming = {
+  f: { q_first: "Sam", m_monthly: "$5000" },
+  lists: { first: [{ name: "Sam", phone: "555-0100" }], accounts: [{ inst: "Chase", last4: "1111" }] },
+  photos: [
+    { id: "x1", label: "Bank card", dataUrl: "data:image/jpeg;base64,/9j/AA==" },
+    { id: "x2", label: "Water valve", dataUrl: "data:image/jpeg;base64,/9j/BB==" },
+    { id: "x3", label: "XSS", dataUrl: "javascript:alert(1)" }
+  ],
+  fireDrill: { fd_unlock: true },
+  lastDryRun: "2026-11-24T00:00:00Z",
+  reviewed: "2026-11-24T00:00:00Z"
+};
+applyMerge(mergeTarget, mergeIncoming, false);
+assert(mergeTarget.photos.length === 2, "applyMerge merges only safe photos");
+assert(mergeTarget.fireDrill.fd_unlock === true && mergeTarget.lastDryRun === "2026-11-24T00:00:00Z" && mergeTarget.reviewed === "2026-11-24T00:00:00Z", "applyMerge merges fireDrill and timestamps");
+
+const cg = buildCaregiverSubset({
+  region: "us",
+  f: { k_home: "123 Main St", h_triage: "ER 555", m_monthly: "$8000", d_pm: "Secret", q_first: "Mom" },
+  lists: { first: [{ name: "Mom" }], accounts: [{ inst: "Chase" }], kids_info: [{ child: "Leo" }] },
+  photos: mergeTarget.photos
+});
+assert(cg.f.k_home === "123 Main St" && cg.f.h_triage === "ER 555" && cg.f.q_first === "Mom", "caregiver subset keeps kids/ER/contact");
+assert(!cg.f.m_monthly && !cg.f.d_pm && !cg.lists.accounts, "caregiver subset omits finances and passwords");
+assert(cg.photos.length === 1 && cg.photos[0].label === "Water valve", "caregiver subset excludes bank-card photo");
+
+// 13. QuotaExceededError handling, lock screen wipe & standalone HTML security
+const origSetItem = localStorage.setItem.bind(localStorage);
+localStorage.setItem = () => { throw new Error("QuotaExceededError"); };
+S.f.q_first = "Quota Test";
+save(true, false);
+assert(els.toast.textContent.includes("Storage") || els.toast.textContent.includes("storage"), "QuotaExceededError surfaces toast without crashing");
+localStorage.setItem = origSetItem;
+
+engageBrowserLockScreen();
+assert(!S.f && els.panels.innerHTML === "" && els.lockScreen.innerHTML.includes("lsTogCards") && els.lockScreen.innerHTML.includes("lsReset"), "lock screen wipes state/DOM and renders recovery + reset");
+
+assert(!saHtml.includes("window.open(this.src)") && !/onclick=/i.test(saHtml), "standalone html removes unsafe window.open and inline onclick");
+assert(saHtml.includes("saLightbox") && saHtml.includes("saLock"), "standalone html includes lightbox and lock control");
+
+quickStartWizard();
+assert(els.dlgForm.innerHTML.includes("qsFirst") && els.dlgForm.innerHTML.includes("qsPm"), "quickStartWizard renders even with empty S");
+S = {}; norm();
+quickStartWizard();
+assert(els.dlgForm.innerHTML.includes("qsFirst") && els.dlgForm.innerHTML.includes("qsPm"), "quickStartWizard renders guided setup");
 
 outPrint("ALL_WEB_TESTS_PASSED");

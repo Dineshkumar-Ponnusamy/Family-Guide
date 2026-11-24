@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self';">
 <title>Our Family Field Guide</title>
 <meta name="description" content="A private, 100% offline emergency and digital legacy guide for your family. Zero servers, AES-256-GCM locked backups, cross-border & illness care support.">
 <meta property="og:title" content="Our Family Field Guide">
@@ -40,7 +41,7 @@
   <div class="privacy">🔒 <b>Your details stay on this device.</b> Nothing you type is sent anywhere; it saves in this browser automatically. Never type actual passwords or full account numbers here: write <i>where to find</i> them (your password manager, the safe) and the last 4 digits only. Use <b>Save backup</b> to make a passphrase‑locked copy your spouse can open on their own device. The code you put on GitHub never contains your family's details.</div>
 
   <div id="demoBanner"></div>
-  <nav class="tabs" id="tabs"></nav>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Guide sections"></nav>
   <div class="searchbar" id="searchbar">
     <div class="search-row">
       <div class="search-box">
@@ -49,9 +50,9 @@
       </div>
       <div class="comfort-btns">
         <select id="regionSel" aria-label="Country or region"></select>
-        <button type="button" class="cbtn" data-act="toggleLarge" title="Toggle larger text">A+</button>
-        <button type="button" class="cbtn" data-act="toggleContrast" title="Toggle high contrast">Contrast</button>
-        <button type="button" class="cbtn" data-act="lockBrowser" title="Lock guide with a passphrase on this device">Lock</button>
+        <button type="button" class="cbtn" data-act="toggleLarge" aria-pressed="false" title="Toggle larger text">A+</button>
+        <button type="button" class="cbtn" data-act="toggleContrast" aria-pressed="false" title="Toggle high contrast">Contrast</button>
+        <button type="button" class="cbtn" data-act="lockBrowser" aria-pressed="false" title="Lock guide with a passphrase on this device">Lock</button>
         <button type="button" class="cbtn" data-act="installApp" title="Install as an offline app on phone or desktop">Install App</button>
       </div>
     </div>
@@ -64,7 +65,7 @@
 <dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
 <input type="file" id="fileIn" accept=".json,.html,application/json,text/html" hidden>
 <input type="file" id="photoIn" accept="image/*" hidden>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="schema.js"></script>
 <script src="regions.js"></script>

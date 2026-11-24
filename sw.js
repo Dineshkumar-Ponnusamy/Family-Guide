@@ -1,4 +1,4 @@
-const CACHE = "ffg-v8";
+const CACHE = "ffg-v9";
 const ASSETS = [
   "./",
   "./index.html",
@@ -26,13 +26,17 @@ self.addEventListener("activate", ev => {
 
 self.addEventListener("fetch", ev => {
   if (ev.request.method !== "GET") return;
+  const reqUrl = new URL(ev.request.url);
+  if (reqUrl.origin !== location.origin) return;
+
+  // Network-first for same-origin app files so updates propagate promptly while staying 100% offline-capable.
   ev.respondWith(
-    caches.match(ev.request).then(cached => cached || fetch(ev.request).then(resp => {
-      if (resp && resp.ok && new URL(ev.request.url).origin === location.origin) {
+    fetch(ev.request).then(resp => {
+      if (resp && resp.ok) {
         const clone = resp.clone();
         caches.open(CACHE).then(c => c.put(ev.request, clone));
       }
       return resp;
-    }).catch(() => caches.match("./index.html")))
+    }).catch(() => caches.match(ev.request).then(cached => cached || caches.match("./index.html")))
   );
 });

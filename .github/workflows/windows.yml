@@ -6,6 +6,7 @@ on:
     paths:
       - "native/windows/**"
       - "shared/guide-data.json"
+      - "shared/sync_schema.py"
       - ".github/workflows/windows.yml"
   pull_request:
     paths:
@@ -25,11 +26,6 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Setup Node.js (for schema sync)
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
       - name: Setup Python & sync shared schema JSON
         uses: actions/setup-python@v5
         with:
@@ -41,6 +37,23 @@ jobs:
 
       - name: Publish self-contained single-file Windows .exe
         run: dotnet publish native/windows/FamilyGuide.Windows/FamilyGuide.Windows.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o native/windows/publish
+
+      - name: Verify Compiled Single-File Windows .exe
+        shell: pwsh
+        run: |
+          $exe = ".\native\windows\publish\FamilyFieldGuide.exe"
+          $outFile = "$env:TEMP\ffg-win-smoke.txt"
+          if (Test-Path $outFile) { Remove-Item $outFile -Force }
+          $proc = Start-Process -FilePath $exe -ArgumentList "--smoke-test-out=$outFile" -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Windows smoke test exited with $($proc.ExitCode)" }
+          $txt = Get-Content $outFile -Raw
+          Write-Output $txt
+          if ($txt -notmatch "WINDOWS_APP_SMOKE_TEST_PASSED") { throw "Missing smoke pass marker" }
+
+          $gui = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 4
+          if ($gui.HasExited) { throw "Windows GUI exited prematurely with $($gui.ExitCode)" }
+          Stop-Process -Id $gui.Id -Force
 
       - name: Upload Windows .exe artifact
         uses: actions/upload-artifact@v4

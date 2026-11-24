@@ -25,6 +25,7 @@ public enum ActiveSheet: Identifiable {
 
 public struct RootView: View {
     @Bindable var store: GuideStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var activeSheet: ActiveSheet?
     @State private var scrollTargetId: String?
 
@@ -33,13 +34,25 @@ public struct RootView: View {
     }
 
     public var body: some View {
-        ZStack {
-            mainShell
-                .disabled(store.isBiometricLocked)
-                .blur(radius: store.isBiometricLocked ? 10 : 0)
-
+        Group {
             if store.isBiometricLocked {
-                lockOverlay
+                ZStack {
+                    Theme.paperBg(store.state.highContrast)
+                        .ignoresSafeArea()
+                    lockOverlay
+                }
+            } else {
+                mainShell
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active && store.biometricLockEnabled {
+                store.isBiometricLocked = true
+            }
+        }
+        .onChange(of: store.isBiometricLocked) { _, locked in
+            if locked {
+                activeSheet = nil
             }
         }
         .sheet(item: $activeSheet) { sheet in
@@ -200,8 +213,11 @@ public struct RootView: View {
                     Button { activeSheet = .search } label: { Label("Search", systemImage: "magnifyingglass") }
 
                     Button {
-                        Task {
+                        if store.canEvaluateBiometrics() {
+                            store.setBiometricLockEnabled(true)
                             store.isBiometricLocked = true
+                        } else {
+                            store.statusToast = "Touch ID, Face ID, or device passcode is unavailable on this device."
                         }
                     } label: {
                         Label("Lock", systemImage: "lock.fill")

@@ -7,7 +7,8 @@ const LOCK_KEY = "familyFieldGuide.locked.v1";
 const PROJECT_FILES = ["index.html", "styles.css", "schema.js", "regions.js", "app.js", "manifest.json", "sw.js", "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "README.md", "LICENSE"];
 const GITIGNORE = "# Never commit your family's details\nfamily-field-guide-*.json\nfamily-field-guide-*.html\nfamily-guide-*.json\n*.backup.json\n.DS_Store\n";
 let S = load();
-let browserLockPass = null, idleTimer = null, deferredInstallPrompt = null;
+let browserLockPass = null, browserLockKey = null, browserLockSalt = null, lockDebounceT = null, pendingLockSnap = null;
+let idleTimer = null, deferredInstallPrompt = null;
 const isStandaloneApp = () => Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator?.standalone);
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -16,14 +17,43 @@ const safeJson = v => JSON.stringify(v).replace(/<\/script/gi, "<\\/script");
 const uid = p => p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const hasCrypto = () => Boolean(window.crypto && crypto.subtle && crypto.getRandomValues);
 
+function stripUnsafeKeys(val) {
+  if (Array.isArray(val)) return val.map(stripUnsafeKeys);
+  if (val && typeof val === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+      out[k] = stripUnsafeKeys(v);
+    }
+    return out;
+  }
+  return val;
+}
+
+function sanitizeState(raw) {
+  const clean = stripUnsafeKeys(raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {});
+  clean.stateVersion = 1;
+  clean.f = (clean.f && typeof clean.f === "object" && !Array.isArray(clean.f)) ? clean.f : {};
+  clean.lists = (clean.lists && typeof clean.lists === "object" && !Array.isArray(clean.lists)) ? clean.lists : {};
+  clean.checks = (clean.checks && typeof clean.checks === "object" && !Array.isArray(clean.checks)) ? clean.checks : {};
+  clean.extra = (clean.extra && typeof clean.extra === "object" && !Array.isArray(clean.extra)) ? clean.extra : {};
+  clean.customTabs = Array.isArray(clean.customTabs) ? clean.customTabs.filter(t => t && typeof t.id === "string") : [];
+  clean.fireDrill = (clean.fireDrill && typeof clean.fireDrill === "object" && !Array.isArray(clean.fireDrill)) ? clean.fireDrill : {};
+  clean.photos = Array.isArray(clean.photos)
+    ? clean.photos.filter(p => p && typeof p.id === "string" && safeImgUrl(p.dataUrl)).slice(0, 10)
+    : [];
+  return clean;
+}
+
 function load() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; }
+  try { return sanitizeState(JSON.parse(localStorage.getItem(KEY)) || {}); } catch { return {}; }
 }
 function norm() {
+  S.stateVersion = 1;
   S.f ??= {}; S.lists ??= {}; S.checks ??= {}; S.track ??= "hurt"; S.tab ??= "start";
   S.extra ??= {}; S.customTabs ??= [];
   S.fireDrill ??= {}; S.lastDryRun ??= null;
-  S.photos ??= [];
+  S.photos = Array.isArray(S.photos) ? S.photos.filter(p => p && safeImgUrl(p.dataUrl)).slice(0, 10) : [];
   S.region ??= "us";
   if (typeof REGIONS !== "undefined" && !REGIONS[S.region]) S.region = "us";
   S.isDemo = Boolean(S.isDemo);
@@ -79,7 +109,7 @@ function rList(b) {
 const collapsedCards = new Set();
 function cardHeadHtml(title, badgeText, collapseKey) {
   const isCol = collapsedCards.has(collapseKey);
-  return `<div class="card-head"><h3>${esc(title)}</h3><div class="card-meta">${badgeText ? `<span class="card-badge">${esc(badgeText)}</span>` : ""}${!S.readMode ? `<button type="button" class="card-tog" data-togcard="${esc(collapseKey)}" title="Collapse or expand">${isCol ? "▸" : "▾"}</button>` : ""}</div></div>`;
+  return `<div class="card-head"><h3>${esc(title)}</h3><div class="card-meta">${badgeText ? `<span class="card-badge">${esc(badgeText)}</span>` : ""}${!S.readMode ? `<button type="button" class="card-tog" data-togcard="${esc(collapseKey)}" aria-expanded="${isCol ? "false" : "true"}" title="Collapse or expand">${isCol ? "▸" : "▾"}</button>` : ""}</div></div>`;
 }
 function rStep(s) {
   const ov = getRegion().stepOverrides?.[s.id];
@@ -95,19 +125,37 @@ function autoGrow(ta) {
 const allTabs = () => [...TABS, ...S.customTabs.map(c => ({ ...c, custom: true, blocks: [], lede: "Your own section. Add fields or tables below." }))];
 
 let saveT, lockQueue = Promise.resolve();
+function flushLockSave() {
+  clearTimeout(lockDebounceT);
+  lockDebounceT = null;
+  if (!pendingLockSnap || !browserLockKey || !browserLockSalt || !hasCrypto()) return lockQueue;
+  const snap = pendingLockSnap;
+  pendingLockSnap = null;
+  const key = browserLockKey;
+  const salt = browserLockSalt;
+  lockQueue = lockQueue.then(async () => {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(snap));
+    localStorage.setItem(LOCK_KEY, JSON.stringify({ app: "family-field-guide", v: 1, salt: b64(salt), iv: b64(iv), data: b64(ct) }));
+    localStorage.removeItem(KEY);
+  }).catch(() => {
+    toast("Storage full — remove a photo or save a backup now");
+  });
+  return lockQueue;
+}
 function save(quiet, touch = true) {
   if (touch) S.updated = new Date().toISOString();
-  if (browserLockPass && hasCrypto()) {
-    localStorage.removeItem(KEY);
-    const snap = JSON.stringify(S);
-    lockQueue = lockQueue.then(async () => {
-      const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-      const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await keyFrom(browserLockPass, salt), enc.encode(snap));
-      localStorage.setItem(LOCK_KEY, JSON.stringify({ app: "family-field-guide", v: 1, salt: b64(salt), iv: b64(iv), data: b64(ct) }));
-    }).catch(() => {});
+  if (browserLockPass && browserLockKey && browserLockSalt && hasCrypto()) {
+    pendingLockSnap = JSON.stringify(S);
+    clearTimeout(lockDebounceT);
+    lockDebounceT = setTimeout(() => { flushLockSave(); }, 250);
     resetIdleLockTimer();
   } else {
-    localStorage.setItem(KEY, JSON.stringify(S));
+    try {
+      localStorage.setItem(KEY, JSON.stringify(S));
+    } catch {
+      toast("Device storage full — remove a photo or save a backup now");
+    }
   }
   meter();
   if (!quiet) { clearTimeout(saveT); saveT = setTimeout(() => toast("Saved on this device"), 500); }
@@ -316,7 +364,7 @@ function renderMoneyGuideHtml(forPrint = false) {
   if (!forPrint) return inner;
   return `<div class="sheet">
     <h1>Survivor's Guide to Handling Big Money &amp; Payouts</h1>
-    <p class="sheet-sub">${esc(getRegion().label)} · Updated ${new Date().toLocaleDateString()} · General educational guidance, not personal legal, tax, or investment advice.</p>
+    <p class="sheet-sub">${esc(getRegion().label)}${getRegion().lastVerified ? ` · Verified ${esc(getRegion().lastVerified)}` : ""} · Updated ${new Date().toLocaleDateString()} · General educational guidance, not personal legal, tax, or investment advice.</p>
     ${inner}
   </div>`;
 }
@@ -343,7 +391,7 @@ function renderProFinderHtml(forPrint = false) {
   if (!forPrint) return inner;
   return `<div class="sheet">
     <h1>How to Find Vetted &amp; Low-Cost Professional Help</h1>
-    <p class="sheet-sub">${esc(getRegion().label)} · Updated ${new Date().toLocaleDateString()} · General directory guidance, not legal, tax, or financial advice.</p>
+    <p class="sheet-sub">${esc(getRegion().label)}${getRegion().lastVerified ? ` · Verified ${esc(getRegion().lastVerified)}` : ""} · Updated ${new Date().toLocaleDateString()} · General directory guidance, not legal, tax, or financial advice.</p>
     ${inner}
   </div>`;
 }
@@ -493,12 +541,13 @@ function render() {
   document.body.classList.toggle("large-text", !!S.largeText);
   document.body.classList.toggle("high-contrast", !!S.highContrast);
   const largeBtn = document.querySelector('[data-act="toggleLarge"]');
-  if (largeBtn) largeBtn.classList.toggle("on", !!S.largeText);
+  if (largeBtn) { largeBtn.classList.toggle("on", !!S.largeText); largeBtn.setAttribute?.("aria-pressed", String(!!S.largeText)); }
   const hcBtn = document.querySelector('[data-act="toggleContrast"]');
-  if (hcBtn) hcBtn.classList.toggle("on", !!S.highContrast);
+  if (hcBtn) { hcBtn.classList.toggle("on", !!S.highContrast); hcBtn.setAttribute?.("aria-pressed", String(!!S.highContrast)); }
   const lockBtn = document.querySelector('[data-act="lockBrowser"]');
   if (lockBtn) {
     lockBtn.classList.toggle("on", !!browserLockPass);
+    lockBtn.setAttribute?.("aria-pressed", String(!!browserLockPass));
     lockBtn.textContent = browserLockPass ? "Locked ✓" : "Lock";
   }
   const rSel = $("#regionSel");
@@ -510,16 +559,16 @@ function render() {
     if (S.isDemo) {
       db.innerHTML = `<div class="demo-banner active"><span><b>Sample family preview (${esc(getRegion().label)})</b> — explore Read mode, Search, Readiness Audit, or Caregiver Sheet. Nothing here is saved as yours.</span><div class="db-acts"><button type="button" class="primary" data-act="clearDemo">Clear sample &amp; start my guide</button></div></div>`;
     } else if (!hasAnyContent() && !S.readMode && !S.dismissDemo && typeof DEMO_FAMILIES !== "undefined") {
-      db.innerHTML = `<div class="demo-banner"><span><b>New here?</b> Preview how the guide looks filled out (including US + India / H-1B examples), or start typing below.</span><div class="db-acts"><button type="button" class="primary" data-act="loadDemo">Load sample family</button><button type="button" data-act="dismissDemo">Dismiss</button></div></div>`;
+      db.innerHTML = `<div class="demo-banner"><span><b>New here?</b> Take a 5-minute guided setup, preview how the guide looks filled out, or start typing below.</span><div class="db-acts"><button type="button" class="primary" data-act="quickStart">5-minute guided setup</button><button type="button" data-act="loadDemo">Load sample family</button><button type="button" data-act="dismissDemo">Dismiss</button></div></div>`;
     } else {
       db.innerHTML = "";
     }
   }
 
   const tabs = allTabs();
-  $("#tabs").innerHTML = tabs.map(t => `<button type="button" data-tab="${esc(t.id)}" class="${S.tab === t.id ? "on" : ""} ${t.custom ? "custom" : ""}">${esc(t.label)}</button>`).join("")
+  $("#tabs").innerHTML = tabs.map(t => `<button type="button" role="tab" id="tab-${esc(t.id)}" aria-selected="${S.tab === t.id ? "true" : "false"}" aria-controls="p-${esc(t.id)}" data-tab="${esc(t.id)}" class="${S.tab === t.id ? "on" : ""} ${t.custom ? "custom" : ""}">${esc(t.label)}</button>`).join("")
     + `<button type="button" class="newtab" data-act="newtab">+ Section</button><span class="spacer"></span>`
-    + `<button type="button" class="tool${S.readMode ? " on" : ""}" data-act="toggleRead">${S.readMode ? "Edit mode" : "Read mode"}</button>`
+    + `<button type="button" class="tool${S.readMode ? " on" : ""}" aria-pressed="${S.readMode ? "true" : "false"}" data-act="toggleRead">${S.readMode ? "Edit mode" : "Read mode"}</button>`
     + `<button type="button" class="tool" data-act="summary">1-page Summary</button>`
     + `<button type="button" class="tool" data-act="backup">Save backup</button>`
     + `<button type="button" class="tool" data-act="restore">Open backup</button>`
@@ -535,7 +584,7 @@ function render() {
     const body = (S.readMode && !inner.trim())
       ? `<div class="ro-empty-tab">Nothing filled in this section yet. <a href="#" data-act="toggleReadLink" style="color:var(--sky)">Switch to Edit mode</a> to add details.</div>`
       : inner;
-    return `<section class="panel ${S.tab === t.id ? "on" : ""}" id="p-${esc(t.id)}"><h2>${esc(t.title)}</h2><p class="lede">${esc(t.lede)}</p>${body}</section>`;
+    return `<section class="panel ${S.tab === t.id ? "on" : ""}" role="tabpanel" aria-labelledby="tab-${esc(t.id)}" id="p-${esc(t.id)}"><h2>${esc(t.title)}</h2><p class="lede">${esc(t.lede)}</p>${body}</section>`;
   }).join("");
   document.querySelectorAll("textarea[data-f]").forEach(autoGrow);
   meter(); trackProgress(); syncInstallBtn();
@@ -635,12 +684,20 @@ function computeAudit() {
     : { id: "digital_legacy", sev: "ok", title: "Digital legacy / password access set", detail: "Password manager or platform legacy contacts are documented." });
 
   const cryptoRows = rowsOf("crypto");
-  if (cryptoRows.length) {
-    const hasSeedPhrase = cryptoRows.some(r => Object.values(r).some(v => /\b([a-z]{3,}\s+){11,}[a-z]{3,}\b/i.test(String(v || ""))));
-    const missCryptoAccess = cryptoRows.some(r => !String(r.access || "").trim() || !String(r.helper || "").trim());
-    if (hasSeedPhrase) {
-      items.push({ id: "crypto_safety", sev: "high", title: "Possible crypto seed phrase detected!", detail: "Never store 12/24-word recovery seeds in this guide—write ONLY where the physical backup lives.", tab: "money", block: "crypto" });
-    } else if (missCryptoAccess) {
+  const seedRe = /\b([a-z]{3,}\s+){11,}[a-z]{3,}\b/i;
+  const sensitiveFieldKeys = ["d_pm", "d_2fa", "d_phone", "d_keys", "d_safe", "d_sim", "d_email"];
+  const sensitiveFieldHit = sensitiveFieldKeys.find(k => seedRe.test(f(k)));
+  const customCryptoSeed = Object.values(S.extra || {}).flat().some(x => {
+    if (!/crypto|wallet|seed|key|password/i.test(`${x.label || ""} ${x.title || ""}`)) return false;
+    if (x.type === "field") return seedRe.test(f(x.id));
+    return rowsOf(x.id).some(r => Object.values(r).some(v => seedRe.test(String(v || ""))));
+  });
+  const hasCryptoSeed = cryptoRows.some(r => Object.values(r).some(v => seedRe.test(String(v || "")))) || Boolean(sensitiveFieldHit) || customCryptoSeed;
+  if (hasCryptoSeed || cryptoRows.length) {
+    const missCrypto = cryptoRows.some(r => !String(r.access || "").trim() || !String(r.helper || "").trim());
+    if (hasCryptoSeed) {
+      items.push({ id: "crypto_safety", sev: "high", title: "Possible crypto seed phrase detected!", detail: "Never store 12/24-word recovery seeds in this guide—write ONLY where the physical backup lives.", tab: sensitiveFieldHit ? "docs" : "money", block: sensitiveFieldHit ? "Getting into things" : "crypto", field: sensitiveFieldHit || "" });
+    } else if (missCrypto) {
       items.push({ id: "crypto_safety", sev: "med", title: "Crypto entry missing recovery location or helper", detail: "Record where the seed/hardware wallet is stored and a trusted helper who can assist safely.", tab: "money", block: "crypto" });
     } else {
       items.push({ id: "crypto_safety", sev: "ok", title: "Crypto recovery map documented (no raw seeds)", detail: "Holdings, storage locations, and trusted helper instructions are recorded." });
@@ -648,10 +705,18 @@ function computeAudit() {
   }
 
   const govRows = rowsOf("gov_ids");
-  if (govRows.length) {
-    const hasFullGovId = govRows.some(r => Object.values(r).some(v => /\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b|\b\d{9,}\b/.test(String(v || ""))));
-    items.push(hasFullGovId
-      ? { id: "gov_id_privacy", sev: "high", title: "Possible full SSN / National ID detected!", detail: "Safety rule: enter ONLY the last 4 digits and where the original card lives—remove full ID numbers.", tab: "docs", block: "gov_ids" }
+  const strictIdRe = /\b\d{3}-\d{2}-\d{4}\b|\b\d{4}[\s-]\d{4}[\s-]\d{4}\b/;
+  const fieldIdHit = Object.entries(S.f || {}).find(([, v]) => strictIdRe.test(String(v || "")));
+  const listIdHit = Object.entries(S.lists || {}).some(([lid, rows]) =>
+    (rows || []).some(r => {
+      if (!rowHasFilledValue(lid, r)) return false;
+      if (Object.values(r).some(v => strictIdRe.test(String(v || "")))) return true;
+      return lid === "gov_ids" && /\b\d{9,}\b/.test(String(r.last4 || ""));
+    })
+  );
+  if (govRows.length || fieldIdHit || listIdHit) {
+    items.push((fieldIdHit || listIdHit)
+      ? { id: "gov_id_privacy", sev: "high", title: "Possible full SSN / National ID detected!", detail: "Safety rule: enter ONLY the last 4 digits and where the original card lives—remove full ID numbers.", tab: fieldIdHit ? "start" : "docs", block: fieldIdHit ? "" : "gov_ids", field: fieldIdHit ? fieldIdHit[0] : "" }
       : { id: "gov_id_privacy", sev: "ok", title: "Key IDs mapped safely (last 4 only)", detail: "Government IDs record only last 4 digits and physical locations." });
   }
 
@@ -1000,8 +1065,10 @@ document.addEventListener("click", e => {
     else collapsedCards.add(key);
     const card = e.target.closest(".card");
     if (card) {
-      card.classList.toggle("collapsed", collapsedCards.has(key));
-      e.target.textContent = collapsedCards.has(key) ? "▸" : "▾";
+      const isCol = collapsedCards.has(key);
+      card.classList.toggle("collapsed", isCol);
+      e.target.textContent = isCol ? "▸" : "▾";
+      e.target.setAttribute("aria-expanded", isCol ? "false" : "true");
     }
   }
   if (d.del) {
@@ -1026,6 +1093,7 @@ document.addEventListener("click", e => {
   if (d.act === "loadDemo") loadDemo();
   if (d.act === "clearDemo") clearDemo();
   if (d.act === "dismissDemo") { S.dismissDemo = true; save(true, false); render(); }
+  if (d.act === "quickStart") quickStartWizard();
   if (d.act === "addPhoto") addPhotoDialog();
   if (d.delphoto) {
     const pid = d.delphoto;
@@ -1565,12 +1633,22 @@ async function keyFrom(pass, salt) {
 }
 
 /* ---------- Diceware passphrase & GF(256) Shamir 2-of-3 split ---------- */
-function generatePassphrase(wordCount = 5) {
+function randomIndex(max) {
+  if (!window.crypto?.getRandomValues) throw new Error("Secure random generator (crypto.getRandomValues) is unavailable");
+  const buf = new Uint32Array(1);
+  const limit = Math.floor(0x100000000 / max) * max;
+  let r;
+  do {
+    crypto.getRandomValues(buf);
+    r = buf[0];
+  } while (r >= limit);
+  return r % max;
+}
+function generatePassphrase(wordCount = 6) {
   const words = (typeof DICE_WORDS !== "undefined" && DICE_WORDS.length) ? DICE_WORDS : ["maple", "river", "lantern", "cedar", "orbit"];
-  const buf = new Uint32Array(wordCount);
-  if (window.crypto?.getRandomValues) crypto.getRandomValues(buf);
-  else for (let i = 0; i < wordCount; i++) buf[i] = Math.floor(Math.random() * 0xffffffff);
-  return Array.from(buf, n => words[n % words.length]).join("-");
+  const picks = [];
+  for (let i = 0; i < wordCount; i++) picks.push(words[randomIndex(words.length)]);
+  return picks.join("-");
 }
 function gfMul(a, b) {
   let p = 0;
@@ -1599,9 +1677,9 @@ const gfDiv = (a, b) => {
 function sssSplit2of3(secretStr) {
   const bytes = enc.encode(secretStr);
   if (!bytes.length) throw new Error("Empty secret");
+  if (!window.crypto?.getRandomValues) throw new Error("Secure random generator (crypto.getRandomValues) is unavailable");
   const rand = new Uint8Array(bytes.length);
-  if (window.crypto?.getRandomValues) crypto.getRandomValues(rand);
-  else for (let i = 0; i < rand.length; i++) rand[i] = Math.floor(Math.random() * 256);
+  crypto.getRandomValues(rand);
   return [1, 2, 3].map(x => {
     let hex = "";
     for (let i = 0; i < bytes.length; i++) {
@@ -1944,7 +2022,12 @@ function renderAll(root, S) {
       + '<button type="button" class="btn" id="saCare">Caregiver sheet</button>'
       + '<button type="button" class="btn" id="dlJson">Download .json</button>'
       + '<button type="button" class="btn primary" id="saveHtml">Save updated copy (.html)</button>'
-      + '<button type="button" class="btn" onclick="window.print()">Print</button></div></div>'
+      + '<button type="button" class="btn" id="saLock">Lock</button>'
+      + '<button type="button" class="btn" id="saPrint">Print</button></div></div>'
+      + '<div id="saLightbox" hidden style="position:fixed;inset:0;background:rgba(31,58,46,.75);display:none;place-items:center;padding:20px;z-index:30">'
+      + '<div style="background:var(--card);border:2px solid var(--ink);border-radius:8px;padding:16px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;gap:10px">'
+      + '<b id="saLbCap"></b><img id="saLbImg" alt="" style="max-width:82vw;max-height:72vh;object-fit:contain;border-radius:4px">'
+      + '<button type="button" class="btn primary" id="saLbClose" style="align-self:flex-end">Close</button></div></div>'
       + '<div class="sbox"><input type="search" id="saSearch" placeholder="Search guide… (press /)" autocomplete="off"><div class="sres" id="saRes" hidden></div></div>'
       + '<div class="tabs">'+tabs.map(t => '<button type="button" data-t="'+esc(t.id)+'" class="'+(activeTab===t.id?"on":"")+'">'+esc(t.label)+'</button>').join("")+'</div>'
       + tabs.map(t => {
@@ -1962,7 +2045,7 @@ function renderAll(root, S) {
           if (b.type === "list" && b.id !== "call_log") html += listHtml(b.title, b.id, b.cols);
           if (b.type === "money_guide") html += moneyGuideHtml(b);
           if (b.type === "pro_finder") html += proFinderHtml(b);
-          if (b.type === "photos" && S.photos.length) html += '<div class="card" data-bid="visual_refs" data-btitle="Visual reference photos"><h3>'+esc(b.title)+'</h3><div class="pgrid">'+S.photos.filter(ph => safeImgUrl(ph.dataUrl)).map(ph => '<div class="pcard"><img src="'+esc(safeImgUrl(ph.dataUrl))+'" alt="'+esc(ph.label)+'" onclick="window.open(this.src)"><div style="font-size:12.5px;font-weight:600;margin-top:4px">'+esc(ph.label)+'</div></div>').join("")+'</div></div>';
+          if (b.type === "photos" && S.photos.length) html += '<div class="card" data-bid="visual_refs" data-btitle="Visual reference photos"><h3>'+esc(b.title)+'</h3><div class="pgrid">'+S.photos.filter(ph => safeImgUrl(ph.dataUrl)).map((ph,pi) => '<div class="pcard"><img src="'+esc(safeImgUrl(ph.dataUrl))+'" alt="'+esc(ph.label)+'" data-sazoom="'+pi+'"><div style="font-size:12.5px;font-weight:600;margin-top:4px">'+esc(ph.label)+'</div></div>').join("")+'</div></div>';
           if (b.type === "scripts") html += '<div class="card" data-btitle="What to say"><h3>What to say</h3>'+SC.SCRIPTS.map(([st,sb]) => '<div class="script"><b>'+esc(st)+'</b><div><i>'+esc(sb)+'</i></div></div>').join("")+'</div>';
           if (b.type === "letter" && String(S.f.letter||"").trim()) html += '<div class="card" data-btitle="A note to you"><h3>A note to you</h3><div class="val" style="font-family:var(--serif);font-size:17px">'+linkify(S.f.letter)+'</div></div>';
           if (b.type === "kids") { const ks = SC.KIDS.map(([id,em,l]) => fv(em+" "+l, id)).join(""); if (ks) html += '<div class="card" data-bid="kids_card"><div class="grid2">'+ks+'</div></div>'; }
@@ -2023,7 +2106,7 @@ function renderAll(root, S) {
         + '<div class="sboxc"><h3>House Shut-offs</h3><ul>'+[["Water",f("hk_water")],["Gas",f("hk_gas")],["Breaker",f("hk_breaker")],["Keys",f("hk_spare")]].filter(([,v])=>v).map(([k,v])=>'<li><b>'+k+':</b> '+esc(v)+'</li>').join("")+'</ul></div>'
         + '<div class="sboxc"><h3>Pets</h3><ul>'+rowsOf("pets").map(r=>'<li><b>'+esc(r.name||"Pet")+'</b> '+esc(r.food||"")+' '+esc(r.vet||"")+'</li>').join("")+'</ul></div></div>');
     };
-    root.querySelector("#dlJson").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(pkg)], { type:"application/json" })); a.download = "family-field-guide-backup.json"; a.click(); };
+    root.querySelector("#dlJson").onclick = () => { const u = URL.createObjectURL(new Blob([JSON.stringify(pkg)], { type:"application/json" })); const a = document.createElement("a"); a.href = u; a.download = "family-field-guide-backup.json"; a.click(); setTimeout(() => URL.revokeObjectURL(u), 4000); };
     root.querySelector("#saveHtml").onclick = async () => {
       if (!unlockedPass) return;
       const now = new Date().toISOString(); S.updated = now; S.lastBackup = now;
@@ -2033,9 +2116,35 @@ function renderAll(root, S) {
       const ct = await crypto.subtle.encrypt({ name:"AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(S)));
       pkg = { app:"family-field-guide", v:1, salt:b64(salt), iv:b64(iv), data:b64(ct) };
       const nextHtml = TEMPLATE_HTML.replace(/<script id="ffg-pkg" type="application\\/json">[\\s\\S]*?<\\/script>/i, () => '<script id="ffg-pkg" type="application/json">'+safeJson(pkg)+'<\\/script>');
-      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([nextHtml], { type:"text/html" })); a.download = "family-field-guide-"+now.slice(0,10)+".html"; a.click();
+      const u = URL.createObjectURL(new Blob([nextHtml], { type:"text/html" })); const a = document.createElement("a"); a.href = u; a.download = "family-field-guide-"+now.slice(0,10)+".html"; a.click(); setTimeout(() => URL.revokeObjectURL(u), 4000);
       dirty = false; statusMsg = "Saved updated copy ("+now.slice(0,10)+")"; draw();
     };
+    root.querySelector("#saPrint").onclick = () => window.print();
+    const lockNow = () => {
+      unlockedPass = "";
+      clearTimeout(saIdle);
+      for (const k of Object.keys(S)) delete S[k];
+      root.innerHTML = "";
+      root.hidden = true;
+      document.getElementById("gate").hidden = false;
+      document.getElementById("uerr").textContent = "Locked due to inactivity or manual lock.";
+    };
+    root.querySelector("#saLock").onclick = lockNow;
+    let saIdle = null;
+    const bumpSaIdle = () => { clearTimeout(saIdle); if (unlockedPass) saIdle = setTimeout(lockNow, 15 * 60 * 1000); };
+    bumpSaIdle();
+    ["pointerdown","keydown"].forEach(ev => root.addEventListener(ev, bumpSaIdle, { passive: true }));
+    const lb = root.querySelector("#saLightbox"), lbImg = root.querySelector("#saLbImg"), lbCap = root.querySelector("#saLbCap"), lbClose = root.querySelector("#saLbClose");
+    if (lb && lbClose) {
+      lbClose.onclick = () => { lb.hidden = true; lb.style.display = "none"; lbImg.src = ""; };
+      lb.onclick = ev => { if (ev.target === lb) lbClose.onclick(); };
+      root.querySelectorAll("[data-sazoom]").forEach(im => {
+        im.onclick = () => {
+          const ph = S.photos.filter(p => safeImgUrl(p.dataUrl))[+im.dataset.sazoom];
+          if (ph) { lbImg.src = safeImgUrl(ph.dataUrl); lbCap.textContent = ph.label; lb.hidden = false; lb.style.display = "grid"; }
+        };
+      });
+    }
     const sin = root.querySelector("#saSearch"), sres = root.querySelector("#saRes");
     let sidx = -1, hits = [];
     sin.oninput = () => {
@@ -2065,13 +2174,85 @@ function renderAll(root, S) {
 </html>`;
 }
 
+function quickStartWizard() {
+  const regOpts = (typeof REGIONS !== "undefined")
+    ? Object.entries(REGIONS).map(([k, v]) => `<option value="${esc(k)}"${S.region === k ? " selected" : ""}>${esc(v.label)}</option>`).join("")
+    : "";
+  openDlg(`<h3>5-Minute Guided Setup</h3>
+    <p class="hint">Fill in just the 4 essentials that matter most at 2 AM, then save your first locked backup.</p>
+    <label class="f"><span>1. Country / Region preset</span><select id="qsReg">${regOpts}</select></label>
+    <label class="f" style="margin-top:8px"><span>2. First person to call</span><input id="qsFirst" value="${esc(S.f?.q_first || "")}" placeholder="Name &amp; phone"></label>
+    <label class="f" style="margin-top:8px"><span>3. Where original papers live</span><input id="qsBinder" value="${esc(S.f?.q_binder || "")}" placeholder="e.g. fireproof box, hall closet"></label>
+    <label class="f" style="margin-top:8px"><span>4. How to unlock my phone &amp; password manager</span><input id="qsPhone" value="${esc(S.f?.d_phone || "")}" placeholder="e.g. code in sealed envelope in safe"></label>
+    <label class="f" style="margin-top:8px"><span>Password manager emergency access</span><input id="qsPm" value="${esc(S.f?.d_pm || "")}" placeholder="e.g. Bitwarden / 1Password Emergency Kit in safe"></label>
+    <div class="btns">
+      <button type="button" class="btn" id="cancelDlg">Skip</button>
+      <button type="button" class="btn" id="qsSaveOnly">Save &amp; explore</button>
+      <button type="submit" class="btn primary" id="go">Save &amp; lock backup →</button>
+    </div>`, true);
+  const applyQs = () => {
+    const r = $("#qsReg")?.value;
+    if (r && typeof REGIONS !== "undefined" && REGIONS[r]) S.region = r;
+    const setIf = (k, v) => { if (v.trim()) S.f[k] = v.trim(); };
+    setIf("q_first", $("#qsFirst").value);
+    setIf("q_binder", $("#qsBinder").value);
+    setIf("d_phone", $("#qsPhone").value);
+    setIf("d_pm", $("#qsPm").value);
+    S.dismissDemo = true;
+    save(true, true);
+    render();
+  };
+  $("#cancelDlg").onclick = () => $("#dlg").close();
+  $("#qsSaveOnly").onclick = () => { applyQs(); $("#dlg").close(); toast("Essentials saved"); };
+  $("#dlgForm").onsubmit = ev => {
+    ev.preventDefault();
+    applyQs();
+    $("#dlg").close();
+    if (hasCrypto()) backupDialog();
+  };
+}
+
+function buildCaregiverSubset(src) {
+  const keepFields = new Set([
+    "q_first", "q_binder", "d_hcd", "d_mpoa", "d_ins", "d_meds",
+    "h_pharm", "h_wishes", "h_diag", "h_triage", "h_redflag", "h_devices",
+    "h_rescue", "h_portal", "h_comfort", "hk_water", "hk_gas", "hk_breaker",
+    "hk_spare", "hk_trash", "hk_quirks", "k_call", "k_home", "k_911",
+    "k_school", "k_safe", "k_routine", "k_note"
+  ]);
+  const keepLists = new Set(["first", "kids_info", "fam_health", "pets"]);
+  const f = {};
+  for (const [k, v] of Object.entries(src.f || {})) {
+    if (keepFields.has(k)) f[k] = v;
+  }
+  const lists = {};
+  for (const [k, v] of Object.entries(src.lists || {})) {
+    if (keepLists.has(k)) lists[k] = v;
+  }
+  return {
+    stateVersion: 1,
+    region: src.region || "us",
+    track: "caregiver",
+    tab: "kids",
+    readMode: true,
+    f,
+    lists,
+    checks: {},
+    customTabs: [],
+    extra: {},
+    fireDrill: {},
+    photos: (src.photos || []).filter(p => p && safeImgUrl(p.dataUrl) && !/card|bank|ssn|passport|crypto|seed/i.test(p.label || "")).slice(0, 10),
+    updated: src.updated || new Date().toISOString()
+  };
+}
+
 function backupDialog() {
   if (!hasCrypto()) return toast("Locked backups require HTTPS, localhost, or Web Crypto support");
   openDlg(`<h3>Save a locked backup</h3>
     <p class="hint">Choose a passphrase your spouse knows (or keep it with your will). Without it, the file can't be opened. Don't upload backups to GitHub.</p>
     <label class="f"><span>Passphrase (at least 8 characters)</span><input type="password" id="pw1" required></label>
     <div class="pass-tools">
-      <button type="button" id="genPw">Generate memorable passphrase</button>
+      <button type="button" id="genPw">Generate 6-word passphrase</button>
       <button type="button" id="togPw">Show</button>
     </div>
     <label class="f" style="margin-top:8px"><span>Type it again</span><input type="password" id="pw2" required></label>
@@ -2080,12 +2261,16 @@ function backupDialog() {
       <span>Also create <b>2-of-3 Split Recovery Cards</b> (Spouse · Safe · Trusted Person). Any 2 cards unlock this backup.</span>
     </label>
     <div class="opt-list" style="margin-top:12px">
+      <label class="opt-card"><input type="radio" name="bscope" value="full" checked><div><b>Full Family Guide (for Spouse / Executor)</b><small>Includes finances, insurance, crypto map, legal papers, health &amp; kids.</small></div></label>
+      <label class="opt-card"><input type="radio" name="bscope" value="caregiver"><div><b>Caregiver &amp; ER Packet Only (Least-Privilege)</b><small>Includes kids, address, safe word, pets, house shut-offs &amp; ER medical notes—omits all finances, IDs &amp; passwords.</small></div></label>
+    </div>
+    <div class="opt-list" style="margin-top:8px">
       <label class="opt-card"><input type="radio" name="bfmt" value="html" checked><div><b>Standalone locked HTML (.html) — Recommended</b><small>One self-contained offline file your spouse can double-click in any browser, even years from now.</small></div></label>
       <label class="opt-card"><input type="radio" name="bfmt" value="json"><div><b>Encrypted JSON (.json)</b><small>Compact data file to re-open inside this app.</small></div></label>
     </div>
     ${btns("Save file")}`);
   $("#genPw").onclick = () => {
-    const pw = generatePassphrase(5);
+    const pw = generatePassphrase(6);
     $("#pw1").value = $("#pw2").value = pw;
     $("#pw1").type = $("#pw2").type = "text";
     $("#togPw").textContent = "Hide";
@@ -2100,18 +2285,23 @@ function backupDialog() {
     if (p.length < 8) return toast("Use at least 8 characters");
     if (p !== $("#pw2").value) return toast("Passphrases don't match");
     const fmt = $("#dlgForm").querySelector('input[name="bfmt"]:checked').value;
+    const scope = $("#dlgForm").querySelector('input[name="bscope"]:checked').value;
     const makeCards = $("#mkSss").checked;
     const now = new Date().toISOString();
-    S.lastBackup = now;
-    if (!S.updated) S.updated = now;
+    if (scope === "full") {
+      S.lastBackup = now;
+      if (!S.updated) S.updated = now;
+    }
+    const payloadObj = scope === "caregiver" ? buildCaregiverSubset(S) : S;
     const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await keyFrom(p, salt), enc.encode(JSON.stringify(S)));
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await keyFrom(p, salt), enc.encode(JSON.stringify(payloadObj)));
     const pkg = { app: "family-field-guide", v: 1, salt: b64(salt), iv: b64(iv), data: b64(ct) };
     const out = JSON.stringify(pkg);
     const stamp = now.slice(0, 10);
-    if (fmt === "html") download(`family-field-guide-${stamp}.html`, buildStandaloneHtml(pkg), "text/html");
-    else download(`family-field-guide-${stamp}.json`, out, "application/json");
-    save(true, false);
+    const prefix = scope === "caregiver" ? "family-caregiver-packet" : "family-field-guide";
+    if (fmt === "html") download(`${prefix}-${stamp}.html`, buildStandaloneHtml(pkg), "text/html");
+    else download(`${prefix}-${stamp}.json`, out, "application/json");
+    if (scope === "full") save(true, false);
     const shares = makeCards ? sssSplit2of3(p) : null;
     openDlg(`<h3>Backup ready</h3>
       <p>Your ${fmt === "html" ? "standalone locked HTML" : "encrypted JSON"} download has started. Keep the passphrase separate from the file.</p>
@@ -2266,9 +2456,11 @@ function applyMerge(cur, inc, overwriteConflicts = false) {
   });
   const photoKeys = new Set(cur.photos.map(p => p.label + "::" + String(p.dataUrl || "").slice(0, 64)));
   (inc.photos || []).forEach(p => {
-    const pk = p.label + "::" + String(p.dataUrl || "").slice(0, 64);
+    const safeUrl = p ? safeImgUrl(p.dataUrl) : "";
+    if (!safeUrl) return;
+    const pk = p.label + "::" + safeUrl.slice(0, 64);
     if (cur.photos.length < 10 && !photoKeys.has(pk)) {
-      cur.photos.push({ ...p });
+      cur.photos.push({ id: String(p.id || uid("ph")), label: String(p.label || "Photo"), dataUrl: safeUrl });
       photoKeys.add(pk);
       addedPhotos++;
     }
@@ -2319,7 +2511,7 @@ function promptUnlockPkg(pkg) {
     let incoming;
     try {
       const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(pkg.iv) }, await keyFrom(pass, unb64(pkg.salt)), unb64(pkg.data));
-      incoming = JSON.parse(dec.decode(pt));
+      incoming = sanitizeState(JSON.parse(dec.decode(pt)));
     } catch { return toast("Wrong passphrase"); }
 
     if (!hasAnyContent()) {
@@ -2387,42 +2579,91 @@ $("#fileIn").onchange = async e => {
 };
 
 /* ---------- Optional In-Browser Lock + 15-min idle auto-lock ---------- */
+function wipeVisibleGuideDom() {
+  const clearIds = ["panels", "printSheet", "modeBanner", "demoBanner", "searchRes"];
+  clearIds.forEach(id => { const el = document.querySelector("#" + id); if (el) el.innerHTML = ""; });
+  const si = $("#searchIn");
+  if (si) si.value = "";
+}
 function engageBrowserLockScreen() {
   browserLockPass = null;
+  browserLockKey = null;
+  browserLockSalt = null;
+  pendingLockSnap = null;
+  clearTimeout(lockDebounceT);
   clearTimeout(idleTimer);
+  S = {};
+  wipeVisibleGuideDom();
   $("#mainWrap").hidden = true;
   const ls = $("#lockScreen");
   ls.hidden = false;
+  let useCards = false;
   ls.innerHTML = `<div class="lock-box">
     <h1>Our Family <em>Field Guide</em></h1>
-    <p class="hint">This device's browser storage is locked. Enter your browser-lock passphrase to continue.</p>
+    <p class="hint">This device's browser storage is locked. Enter your browser-lock passphrase or 2 recovery cards to continue.</p>
     <form id="lsForm">
-      <label class="f"><span>Passphrase</span><input type="password" id="lsPw" autofocus required></label>
-      <div style="color:var(--tomato);font-size:13px;min-height:18px;margin-top:4px" id="lsErr"></div>
-      <div class="btns"><button type="submit" class="btn primary">Unlock</button></div>
+      <div id="lsPwBox"><label class="f"><span>Passphrase</span><input type="password" id="lsPw" autofocus></label></div>
+      <div id="lsSssBox" hidden>
+        <label class="f"><span>Recovery Card A</span><input id="lsC1" placeholder="FFG-1-..."></label>
+        <label class="f" style="margin-top:8px"><span>Recovery Card B</span><input id="lsC2" placeholder="FFG-2-..."></label>
+      </div>
+      <div style="margin-top:6px"><button type="button" class="linkbtn" id="lsTogCards">Unlock with 2 recovery cards instead</button></div>
+      <div style="color:var(--tomato-ink);font-size:13px;min-height:18px;margin-top:4px" id="lsErr"></div>
+      <div class="btns" style="justify-content:space-between;align-items:center">
+        <button type="button" class="linkbtn" id="lsReset" style="color:var(--tomato-ink)">Forgot passphrase? Reset</button>
+        <button type="submit" class="btn primary">Unlock</button>
+      </div>
     </form>
   </div>`;
+  $("#lsTogCards").onclick = () => {
+    useCards = !useCards;
+    $("#lsPwBox").hidden = useCards;
+    $("#lsSssBox").hidden = !useCards;
+    $("#lsTogCards").textContent = useCards ? "Use passphrase instead" : "Unlock with 2 recovery cards instead";
+  };
+  $("#lsReset").onclick = () => {
+    confirmDlg("Reset locked browser storage on this device? Only do this if you have a backup copy saved elsewhere.", () => {
+      localStorage.removeItem(LOCK_KEY);
+      localStorage.removeItem(KEY);
+      browserLockPass = null; browserLockKey = null; browserLockSalt = null;
+      S = {};
+      ls.hidden = true;
+      $("#mainWrap").hidden = false;
+      norm(); render();
+      toast("Browser storage reset");
+    });
+  };
   $("#lsForm").onsubmit = async ev => {
     ev.preventDefault();
     const err = $("#lsErr"); err.textContent = "";
     try {
       const pkg = JSON.parse(localStorage.getItem(LOCK_KEY) || "null");
-      const pass = $("#lsPw").value;
-      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(pkg.iv) }, await keyFrom(pass, unb64(pkg.salt)), unb64(pkg.data));
-      S = JSON.parse(dec.decode(pt));
+      if (!pkg) throw new Error("No locked data found");
+      const pass = useCards ? sssCombine2of3($("#lsC1").value, $("#lsC2").value) : $("#lsPw").value;
+      if (!pass) throw new Error("Enter passphrase");
+      const salt = unb64(pkg.salt);
+      const key = await keyFrom(pass, salt);
+      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(pkg.iv) }, key, unb64(pkg.data));
+      S = sanitizeState(JSON.parse(dec.decode(pt)));
       browserLockPass = pass;
+      browserLockKey = key;
+      browserLockSalt = salt;
       ls.hidden = true;
       $("#mainWrap").hidden = false;
       norm(); render(); startIdleLockTimer();
-    } catch { err.textContent = "Wrong passphrase"; }
+    } catch { err.textContent = "Wrong passphrase or recovery cards"; }
   };
 }
 function resetIdleLockTimer() {
   clearTimeout(idleTimer);
   if (browserLockPass) idleTimer = setTimeout(engageBrowserLockScreen, 15 * 60 * 1000);
 }
+let idleListenersBound = false;
 function startIdleLockTimer() {
-  ["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, resetIdleLockTimer, { passive: true }));
+  if (!idleListenersBound) {
+    ["pointerdown", "keydown"].forEach(ev => document.addEventListener(ev, resetIdleLockTimer, { passive: true }));
+    idleListenersBound = true;
+  }
   resetIdleLockTimer();
 }
 function lockBrowserDialog() {
@@ -2437,15 +2678,18 @@ function lockBrowserDialog() {
       </div>`);
     $("#cancelDlg").onclick = () => $("#dlg").close();
     $("#unlockForever").onclick = () => {
+      clearTimeout(lockDebounceT);
+      pendingLockSnap = null;
       browserLockPass = null;
+      browserLockKey = null;
+      browserLockSalt = null;
       clearTimeout(idleTimer);
-      localStorage.removeItem(LOCK_KEY);
-      localStorage.setItem(KEY, JSON.stringify(S));
+      try { localStorage.setItem(KEY, JSON.stringify(S)); localStorage.removeItem(LOCK_KEY); } catch { toast("Storage full"); }
       $("#dlg").close(); render(); toast("Browser lock turned off");
     };
     $("#dlgForm").onsubmit = async ev => {
       ev.preventDefault();
-      await lockQueue;
+      await flushLockSave();
       $("#dlg").close();
       engageBrowserLockScreen();
     };
@@ -2454,11 +2698,11 @@ function lockBrowserDialog() {
   openDlg(`<h3>Lock guide on this device</h3>
     <p class="hint">Encrypts what's stored in this browser (<code>localStorage</code>) and auto-locks after 15 minutes idle. Great for shared family laptops.</p>
     <label class="f"><span>Passphrase (at least 8 characters)</span><input type="password" id="lpw1" required></label>
-    <div class="pass-tools"><button type="button" id="genLPw">Generate memorable passphrase</button></div>
+    <div class="pass-tools"><button type="button" id="genLPw">Generate 6-word passphrase</button></div>
     <label class="f" style="margin-top:8px"><span>Type it again</span><input type="password" id="lpw2" required></label>
     ${btns("Enable lock")}`);
   $("#genLPw").onclick = () => {
-    const pw = generatePassphrase(5);
+    const pw = generatePassphrase(6);
     $("#lpw1").value = $("#lpw2").value = pw;
     $("#lpw1").type = $("#lpw2").type = "text";
   };
@@ -2466,9 +2710,13 @@ function lockBrowserDialog() {
     const p = $("#lpw1").value;
     if (p.length < 8) return toast("Use at least 8 characters");
     if (p !== $("#lpw2").value) return toast("Passphrases don't match");
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const key = await keyFrom(p, salt);
     browserLockPass = p;
+    browserLockKey = key;
+    browserLockSalt = salt;
     save(true, false);
-    await lockQueue;
+    await flushLockSave();
     $("#dlg").close();
     startIdleLockTimer();
     render();
@@ -2479,6 +2727,8 @@ function lockBrowserDialog() {
 function boot() {
   window.addEventListener?.("beforeinstallprompt", e => { e.preventDefault(); deferredInstallPrompt = e; syncInstallBtn(); });
   window.addEventListener?.("appinstalled", () => { deferredInstallPrompt = null; syncInstallBtn(); toast("Installed as an app"); });
+  window.addEventListener?.("beforeunload", () => { flushLockSave(); });
+  document.addEventListener?.("visibilitychange", () => { if (document.visibilityState === "hidden") flushLockSave(); });
   if (localStorage.getItem(LOCK_KEY) && !localStorage.getItem(KEY)) {
     engageBrowserLockScreen();
   } else {

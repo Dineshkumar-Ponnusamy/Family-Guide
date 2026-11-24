@@ -1,15 +1,16 @@
 import SwiftUI
 
 public enum Theme {
-    // Canonical Palette (#F6F1E6, #EFE7D6, #FFFDF8, #1F3A2E, #4B5F55, #8A8F84, #D9CFB9, #D2512F, #E9B44C, #4F7C8A)
+    // Canonical Palette (#F6F1E6, #EFE7D6, #FFFDF8, #1F3A2E, #4B5F55, #5D6359, #D9CFB9, #D2512F, #B3381A, #E9B44C, #4F7C8A)
     public static let paper = Color(red: 0xF6 / 255.0, green: 0xF1 / 255.0, blue: 0xE6 / 255.0)
     public static let paper2 = Color(red: 0xEF / 255.0, green: 0xE7 / 255.0, blue: 0xD6 / 255.0)
     public static let card = Color(red: 1.0, green: 0xFD / 255.0, blue: 0xF8 / 255.0)
     public static let ink = Color(red: 0x1F / 255.0, green: 0x3A / 255.0, blue: 0x2E / 255.0)
     public static let ink2 = Color(red: 0x4B / 255.0, green: 0x5F / 255.0, blue: 0x55 / 255.0)
-    public static let mute = Color(red: 0x8A / 255.0, green: 0x8F / 255.0, blue: 0x84 / 255.0)
+    public static let mute = Color(red: 0x5D / 255.0, green: 0x63 / 255.0, blue: 0x59 / 255.0)
     public static let rule = Color(red: 0xD9 / 255.0, green: 0xCF / 255.0, blue: 0xB9 / 255.0)
     public static let tomato = Color(red: 0xD2 / 255.0, green: 0x51 / 255.0, blue: 0x2F / 255.0)
+    public static let tomatoInk = Color(red: 0xB3 / 255.0, green: 0x38 / 255.0, blue: 0x1A / 255.0)
     public static let sun = Color(red: 0xE9 / 255.0, green: 0xB4 / 255.0, blue: 0x4C / 255.0)
     public static let sky = Color(red: 0x4F / 255.0, green: 0x7C / 255.0, blue: 0x8A / 255.0)
 

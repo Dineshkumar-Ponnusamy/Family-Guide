@@ -86,7 +86,7 @@ window, .ffg-root {
     font-family: ui-monospace, "SF Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
     font-size: 10px;
     letter-spacing: 0.1em;
-    color: #D2512F;
+    color: #B3381A;
     font-weight: 700;
 }
 
@@ -109,7 +109,7 @@ window, .ffg-root {
     font-style: italic;
     font-size: 18px;
     font-weight: 600;
-    color: #D2512F;
+    color: #B3381A;
 }
 
 .ffg-script-body {
@@ -133,12 +133,12 @@ window, .ffg-root {
 }
 
 .ffg-subtle {
-    color: #8A8F84;
+    color: #5D6359;
     font-size: 11.5px;
 }
 
 .ffg-badge-high {
-    background-color: #D2512F;
+    background-color: #B3381A;
     color: #FFFFFF;
     border-radius: 6px;
     padding: 2px 8px;
@@ -174,7 +174,13 @@ window, .ffg-root {
 }
 
 .ffg-track-active {
-    background-color: #D2512F;
+    background-color: #B3381A;
+    color: #FFFFFF;
+    font-weight: 700;
+}
+
+button.suggested-action {
+    background-color: #B3381A;
     color: #FFFFFF;
     font-weight: 700;
 }

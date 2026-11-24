@@ -40,6 +40,7 @@ Standalone `.html` backups embed this exact JSON inside:
 ## 3. State JSON Schema (`familyFieldGuide.v1`)
 
 Decrypted plaintext is UTF-8 JSON matching:
+- `stateVersion`: `1` (integer schema version, normalized to `1` on load/save/sanitize for forward migration)
 - `f`: `{ [fieldId: string]: string }`
 - `lists`: `{ [listId: string]: Array<{ [colKey: string]: string }> }`
 - `checks`: `{ [stepId: string]: boolean }`
@@ -51,4 +52,16 @@ Decrypted plaintext is UTF-8 JSON matching:
 - `extra`: `{ [tabId: string]: Array<{ type: "field" | "list", id, label?, title?, wide?, cols? }> }`
 - `fireDrill`: `{ [drillId: string]: boolean }`
 - `photos`: `Array<{ id, label, dataUrl }>`
-- `updated`, `reviewed`, `lastBackup`, `lastDryRun`: ISO-8601 strings or `null`
+- `updated`, `reviewed`, `lastBackup`, `lastDryRun`: strict ISO-8601 UTC timestamp strings (`YYYY-MM-DDTHH:mm:ss.sssZ` or `YYYY-MM-DDTHH:mm:ssZ`, e.g., `"2026-11-24T18:00:00.000Z"`) or `null`. All platforms MUST write UTC (`Z`) timestamps so cross-device recency comparisons and smart merges stay consistent.
+
+## 4. Caregiver / ER Scoped Backup Packets (Least-Privilege)
+
+The Web PWA supports exporting a scoped **Caregiver & ER Packet** (`family-caregiver-packet-YYYY-MM-DD.html` or `.json`) encrypted with the exact same `v1` envelope above so any platform can unlock and view it without exposing financial, legal, or credential-access data.
+
+A Caregiver / ER packet sets:
+- `stateVersion: 1`, `track: "caregiver"`, `tab: "kids"`, `readMode: true`, `region`, and `updated` (UTC ISO-8601)
+- `f`: filtered strictly to caregiver, emergency medical/ER, and house shut-off fields (`q_first`, `q_binder`, `d_hcd`, `d_mpoa`, `d_ins`, `d_meds`, `h_pharm`, `h_wishes`, `h_diag`, `h_triage`, `h_redflag`, `h_devices`, `h_rescue`, `h_portal`, `h_comfort`, `hk_water`, `hk_gas`, `hk_breaker`, `hk_spare`, `hk_trash`, `hk_quirks`, `k_call`, `k_home`, `k_911`, `k_school`, `k_safe`, `k_routine`, `k_note`)
+- `lists`: filtered strictly to `first`, `kids_info`, `fam_health`, and `pets`
+- `checks: {}`, `customTabs: []`, `extra: {}`, `fireDrill: {}`
+- `photos`: valid reference photos (max 10) excluding any photo whose label matches `/card|bank|ssn|passport|crypto|seed/i`
+- All financial accounts, investments, crypto, insurance policies, bills, debts, property, IDs, legal documents, personal letter, and custom sections are omitted.

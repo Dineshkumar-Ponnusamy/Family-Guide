@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -17,6 +18,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -125,6 +129,7 @@ fun SearchDialog(store: GuideStore, onSelect: (SearchHit) -> Unit, onDismiss: ()
 fun BackupDialog(store: GuideStore, onExportJson: (String) -> Unit, onDismiss: () -> Unit) {
     var pw1 by remember { mutableStateOf("") }
     var pw2 by remember { mutableStateOf("") }
+    var showPw by remember { mutableStateOf(false) }
     var makeCards by remember { mutableStateOf(false) }
     var cards by remember { mutableStateOf<List<String>>(emptyList()) }
     var err by remember { mutableStateOf<String?>(null) }
@@ -134,17 +139,43 @@ fun BackupDialog(store: GuideStore, onExportJson: (String) -> Unit, onDismiss: (
         title = { Text("Save Locked Backup", fontWeight = FontWeight.Bold) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = pw1, onValueChange = { pw1 = it }, label = { Text("Passphrase (min 8 chars)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = pw2, onValueChange = { pw2 = it }, label = { Text("Confirm passphrase") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = pw1,
+                    onValueChange = { pw1 = it },
+                    label = { Text("Passphrase (min 8 chars)") },
+                    singleLine = true,
+                    visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                    trailingIcon = {
+                        TextButton(onClick = { showPw = !showPw }) {
+                            Text(if (showPw) "Hide" else "Show", style = MaterialTheme.typography.labelSmall)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = pw2,
+                    onValueChange = { pw2 = it },
+                    label = { Text("Confirm passphrase") },
+                    singleLine = true,
+                    visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                    trailingIcon = {
+                        TextButton(onClick = { showPw = !showPw }) {
+                            Text(if (showPw) "Hide" else "Show", style = MaterialTheme.typography.labelSmall)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 TextButton(onClick = {
-                    val pw = CryptoEngine.generatePassphrase(5, store.data.DICE_WORDS)
+                    val pw = CryptoEngine.generatePassphrase(6, store.data.DICE_WORDS)
                     pw1 = pw; pw2 = pw
-                }) { Text("Generate 5-word Diceware Passphrase") }
+                }) { Text("Generate 6-word Diceware Passphrase") }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = makeCards, onCheckedChange = { makeCards = it })
                     Text("Create 2-of-3 Shamir Recovery Cards", style = MaterialTheme.typography.bodySmall)
                 }
-                err?.let { Text(it, color = FfgColors.Tomato, style = MaterialTheme.typography.bodySmall) }
+                err?.let { Text(it, color = FfgColors.TomatoInk, style = MaterialTheme.typography.bodySmall) }
                 cards.forEachIndexed { idx, card ->
                     SelectionContainer {
                         Text("Card ${idx + 1}: $card", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall)
@@ -175,6 +206,7 @@ fun RestoreDialog(store: GuideStore, onPickFile: ((String) -> Unit) -> Unit, onD
     var payload by remember { mutableStateOf("") }
     var useCards by remember { mutableStateOf(false) }
     var pw by remember { mutableStateOf("") }
+    var showPw by remember { mutableStateOf(false) }
     var cardA by remember { mutableStateOf("") }
     var cardB by remember { mutableStateOf("") }
     var unlocked by remember { mutableStateOf<GuideState?>(null) }
@@ -191,13 +223,13 @@ fun RestoreDialog(store: GuideStore, onPickFile: ((String) -> Unit) -> Unit, onD
                 if (inc != null && mp != null) {
                     Text("+${mp.newFields} fields · +${mp.newRows} rows · +${mp.newTabs} sections · +${mp.newChecks} checks")
                     if (mp.conflictFields.isNotEmpty()) {
-                        Text("${mp.conflictFields.size} conflict(s): ${mp.conflictFields.take(4).joinToString { it.label }}", color = FfgColors.Tomato, style = MaterialTheme.typography.bodySmall)
+                        Text("${mp.conflictFields.size} conflict(s): ${mp.conflictFields.take(4).joinToString { it.label }}", color = FfgColors.TomatoInk, style = MaterialTheme.typography.bodySmall)
                     }
                     Button(onClick = { store.applyMerge(inc, false); onDismiss() }, modifier = Modifier.fillMaxWidth()) { Text("Smart Merge (Keep Mine)") }
                     OutlinedButton(onClick = { store.applyMerge(inc, true); onDismiss() }, modifier = Modifier.fillMaxWidth()) { Text("Smart Merge (Prefer Backup)") }
                     TextButton(onClick = {
                         store.state = inc; store.normalize(); store.save(touch = false); onDismiss()
-                    }) { Text("Replace Everything on Device", color = FfgColors.Tomato) }
+                    }) { Text("Replace Everything on Device", color = FfgColors.TomatoInk) }
                 } else {
                     OutlinedButton(onClick = { onPickFile { payload = it } }) { Text("Choose .json or .html file") }
                     OutlinedTextField(value = payload, onValueChange = { payload = it }, label = { Text("Or paste backup text") }, maxLines = 4, modifier = Modifier.fillMaxWidth())
@@ -209,9 +241,22 @@ fun RestoreDialog(store: GuideStore, onPickFile: ((String) -> Unit) -> Unit, onD
                         OutlinedTextField(value = cardA, onValueChange = { cardA = it }, label = { Text("Card A (FFG-1-...)") }, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = cardB, onValueChange = { cardB = it }, label = { Text("Card B (FFG-2-...)") }, modifier = Modifier.fillMaxWidth())
                     } else {
-                        OutlinedTextField(value = pw, onValueChange = { pw = it }, label = { Text("Passphrase") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(
+                            value = pw,
+                            onValueChange = { pw = it },
+                            label = { Text("Passphrase") },
+                            singleLine = true,
+                            visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                            trailingIcon = {
+                                TextButton(onClick = { showPw = !showPw }) {
+                                    Text(if (showPw) "Hide" else "Show", style = MaterialTheme.typography.labelSmall)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-                    err?.let { Text(it, color = FfgColors.Tomato, style = MaterialTheme.typography.bodySmall) }
+                    err?.let { Text(it, color = FfgColors.TomatoInk, style = MaterialTheme.typography.bodySmall) }
                 }
             }
         },

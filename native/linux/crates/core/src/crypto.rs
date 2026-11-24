@@ -4,7 +4,7 @@ use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
 use pbkdf2::pbkdf2_hmac;
 use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::{Rng, RngCore};
 use regex::Regex;
 use sha2::Sha256;
 
@@ -120,9 +120,10 @@ pub fn generate_passphrase(words: &[String], word_count: usize) -> String {
         "river".to_string(),
     ];
     let pool = if words.is_empty() { &fallback[..] } else { words };
+    let mut rng = OsRng;
     let mut picks = Vec::with_capacity(word_count);
     for _ in 0..word_count {
-        let idx = (OsRng.next_u32() as usize) % pool.len();
+        let idx = rng.gen_range(0..pool.len());
         picks.push(pool[idx].clone());
     }
     picks.join("-")

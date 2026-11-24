@@ -23,7 +23,7 @@
 
 If something happens and you can't be there—an accident, a sudden 2 AM ER visit, chronic/critical illness treatment, job loss, or passing away—your spouse or caregiver opens **one guide** and finds what to do first, who to call, where accounts, IDs, insurance, and papers live, how to handle a large payout safely, and a page written for the kids.
 
-- **Web PWA + 5 Pure Native Apps** (macOS, iOS, Android, Windows, Linux) sharing one single-source-of-truth schema and one byte-for-byte **AES-256-GCM** encrypted backup format.
+- **Flagship Web PWA + 5 Pure Native Developer-Preview Apps** (macOS, iOS, Android, Windows, Linux) sharing one single-source-of-truth schema and one byte-for-byte **AES-256-GCM** encrypted backup format. The **Web PWA** is the full-featured flagship experience (exporting both standalone self-contained `.html` and `.json` backups), while native apps export `.json` backups and import both `.json` and `.html` backups.
 - **Zero servers · Zero accounts · Zero tracking · Zero third-party CDNs.**
 
 ---
@@ -69,24 +69,35 @@ All native builds and offline web packages are built and published from source b
 
 | Platform | Tech Stack | Release Package | Install / Notes |
 |---|---|---|---|
-| **Web / PWA** | Vanilla HTML, CSS, JS *(zero deps)* | [Live Web App](https://dineshkumar-ponnusamy.github.io/Family-Guide/) or `Our-Family-Field-Guide-Web-Offline.zip` | Works offline from `index.html` or install via browser **Install App** / Safari **Add to Home Screen** |
-| **macOS (14+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-macOS-arm64.dmg` | Apple Silicon (`arm64`), ad-hoc signed; allow in **System Settings → Privacy & Security → Open Anyway** |
-| **iOS (17+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-iOS-Xcode-Source.zip` | Local Swift Package + Face ID `@main` entry (`native/apple/`) for Xcode |
-| **Android (8.0+)** | Pure Kotlin + Jetpack Compose (M3) | `Our-Family-Field-Guide-Android.apk` | **Zero `INTERNET` permission**, debug-signed sideload APK, `BiometricPrompt` lock |
-| **Windows (x64)** | Pure C# + .NET 8 + WPF | `Our-Family-Field-Guide-Windows-x64.exe` | Single-file portable `.exe` with native Windows `PrintDialog` |
-| **Linux (GTK4)** | Pure Rust + `gtk4-rs` *(zero WebView)* | `Our-Family-Field-Guide-Linux-x86_64.tar.gz` | Ubuntu 24.04+ / modern Linux (`glibc 2.39+`, `GTK 4.12+`); extract & run `./install.sh` |
+| **Web / PWA (Flagship)** | Vanilla HTML, CSS, JS *(zero deps)* | [Live Web App](https://dineshkumar-ponnusamy.github.io/Family-Guide/) or `Our-Family-Field-Guide-Web-Offline.zip` | Works offline from `index.html` or install via browser **Install App** / Safari **Add to Home Screen** |
+| **macOS (14+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-macOS-arm64.dmg` | **Developer Preview** — Apple Silicon (`arm64`), ad-hoc signed; allow in **System Settings → Privacy & Security → Open Anyway** |
+| **iOS (17+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-iOS-Xcode-Source.zip` | **Developer Preview** — Local Swift Package + Face ID `@main` entry (`native/apple/`) for Xcode |
+| **Android (8.0+)** | Pure Kotlin + Jetpack Compose (M3) | `Our-Family-Field-Guide-Android.apk` *(signed)* or `Our-Family-Field-Guide-Android-PREVIEW-debug.apk` | **Zero `INTERNET` permission**; `-PREVIEW-debug.apk` is a debug-signed preview that cannot upgrade a signed release in place |
+| **Windows (x64)** | Pure C# + .NET 8 + WPF | `Our-Family-Field-Guide-Windows-x64.exe` | **Developer Preview (Unsigned)** — Single-file portable `.exe` with native Windows `PrintDialog` |
+| **Linux (GTK4)** | Pure Rust + `gtk4-rs` *(zero WebView)* | `Our-Family-Field-Guide-Linux-x86_64.tar.gz` | **Developer Preview (Unsigned)** — Ubuntu 24.04+ (`glibc 2.39+`, `GTK 4.12+`); extract & run `./install.sh` |
 
 > **Latest Downloads:** [Releases Page](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/releases/latest)
+
+### Platform Feature & Signing Status Matrix
+
+| Platform | `.html` Export | `.json` Export / Import | Photos | Print Sheets | Signing / Store Status |
+|---|---|---|---|---|---|
+| **Web / PWA** | Yes (Full + Caregiver/ER packet) | Export `.json` · Import `.json` & `.html` | Yes (up to 10 encrypted compressed photos) | Full HTML print sheets (Summary, ER, Caregiver, Cover, Money, Pro Finder, Full Guide, Recovery Cards) | **Flagship** — HTTPS PWA (GitHub Pages) or offline `index.html`; zero installer |
+| **macOS** | No (imports `.html`) | Export `.json` · Import `.json` & `.html` | Preserved in backup state (no photo picker UI) | Share Sheet / text export (Summary & ER Grab Sheet) | **Developer Preview** — Ad-hoc signed `.dmg` (not notarized / no App Store) |
+| **iOS** | No (imports `.html`) | Export `.json` · Import `.json` & `.html` | Preserved in backup state (no photo picker UI) | iOS Share Sheet (Summary & ER Grab Sheet) | **Developer Preview** — Xcode source zip (not on App Store) |
+| **Android** | No (imports `.html`) | Export `.json` · Import `.json` & `.html` | Preserved in backup state (no photo picker UI) | Android Share Intent (Summary & ER Grab Sheet) | **Developer Preview** — Debug preview APK unless CI keystore secrets sign release APK (not on Play Store) |
+| **Windows** | No (imports `.html`) | Export `.json` · Import `.json` & `.html` | Preserved in backup state (no photo picker UI) | Native Windows `PrintDialog` (Summary & ER Grab Sheet) | **Developer Preview** — Unsigned portable `.exe` (not Authenticode-signed) |
+| **Linux** | No (imports `.html`) | Export `.json` · Import `.json` & `.html` | Preserved in backup state (no photo picker UI) | Save printable `.txt` sheets (Summary & ER Grab Sheet) | **Developer Preview** — Unsigned `.tar.gz` binary bundle (not on distro repos/Flathub) |
 
 ---
 
 ## 30-Second Privacy & Security Audit
 
 1. **Zero network traffic & zero external dependencies:** Root Web PWA has zero CDNs/analytics; pure native apps have zero telemetry; Android declares **zero `<uses-permission>`** tags.
-2. **Client-side / device-local storage only:** Web stores locally in `localStorage` (with optional AES-GCM lock + 15-min idle timeout); macOS/iOS store in Application Support (with Touch ID / Face ID); Android in internal `filesDir` (with BiometricPrompt); Windows in `%AppData%`; Linux in `$XDG_DATA_HOME/family-field-guide/state.json` (`0600`).
-3. **Byte-for-byte cross-platform AES-256-GCM backups:** Every app reads and writes the exact same `familyFieldGuide.v1` JSON & standalone self-contained `.html` backups (`PBKDF2-HMAC-SHA256`, 250,000 iterations, 16-byte random salt, 12-byte random IV). See [shared/BACKUP_FORMAT.md](shared/BACKUP_FORMAT.md).
-4. **2-of-3 Shamir Split Recovery Cards + Diceware:** Split your passphrase over `GF(256)` into 3 recovery cards (`FFG-1-...` · Spouse · Safe · Trusted Person) where any 2 unlock any device.
-5. **Readiness & privacy audits:** Automatically warns if a 12+ word crypto seed phrase or full national ID (SSN / Aadhaar) is accidentally entered instead of physical location + last 4 digits. See [SECURITY.md](SECURITY.md).
+2. **Client-side / device-local storage only:** Web stores locally in `localStorage` (with optional AES-GCM lock, DOM/RAM wiping, and 15-min idle timeout); macOS/iOS store in Application Support (with Touch ID / Face ID + Keychain encryption + background re-lock); Android in internal `filesDir` (with `AndroidKeyStore` encryption, `FLAG_SECURE`, and `BiometricPrompt`); Windows in `%AppData%` and Linux in `$XDG_DATA_HOME/family-field-guide/` (`0600`) with persistent `state.locked.json` when locked.
+3. **Byte-for-byte cross-platform AES-256-GCM backups:** Every app reads and writes the exact same `familyFieldGuide.v1` encrypted `.json` backups (`PBKDF2-HMAC-SHA256`, 250,000 iterations, 16-byte random salt, 12-byte random IV) and imports both `.json` and standalone `.html` backups. The **Web PWA** also exports standalone self-contained `.html` backups (full guide and least-privilege Caregiver/ER packets). See [shared/BACKUP_FORMAT.md](shared/BACKUP_FORMAT.md).
+4. **2-of-3 Shamir Split Recovery Cards + 66-bit Diceware:** Generate **6-word passphrases from a 2,048-word Diceware list (66 bits of entropy)** using a fail-closed CSPRNG, and split your passphrase over `GF(256)` into 3 recovery cards (`FFG-1-...` · Spouse · Safe · Trusted Person) where any 2 unlock any device.
+5. **Full-state readiness & privacy audits:** Automatically scans all standard and custom sections/tables to warn if a 12+ word crypto seed phrase or full national ID (SSN / Aadhaar) is accidentally entered instead of physical location + last 4 digits. See [SECURITY.md](SECURITY.md).
 
 ---
 

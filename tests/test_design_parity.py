@@ -6,11 +6,27 @@ Windows, Linux). Zero external dependencies.
 """
 import json
 import os
+import re
 import struct
+import sys
 import tomllib
 import xml.etree.ElementTree as ET
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "shared"))
+import sync_schema  # noqa: E402
+
+
+def rel_lum(hex_color):
+    h = hex_color.lstrip("#")
+    rgb = [int(h[i : i + 2], 16) / 255.0 for i in (0, 2, 4)]
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
+def contrast_ratio(fg, bg):
+    l1, l2 = rel_lum(fg), rel_lum(bg)
+    return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
 
 
 def read(rel):
@@ -40,6 +56,14 @@ def main():
     for sp in schema_paths:
         assert read_bytes(sp) == ref_bytes, f"guide-data.json out of sync: {sp}"
     gd = json.loads(ref_bytes)
+    live_parsed = {}
+    for js_rel in ["schema.js", "regions.js"]:
+        live_parsed.update(sync_schema._JsStaticParser(read(js_rel)).parse_top_level())
+    live_payload = {k: live_parsed[k] for k in sync_schema.EXPORT_KEYS}
+    assert live_payload == gd, "shared/guide-data.json has drifted from schema.js / regions.js! Run python3 shared/sync_schema.py"
+    assert len(gd["DICE_WORDS"]) >= 2048 and len(set(gd["DICE_WORDS"])) == len(gd["DICE_WORDS"]), "DICE_WORDS must have >=2048 unique words"
+    for rk, rv in gd["REGIONS"].items():
+        assert rv.get("lastVerified"), f"Region {rk} missing lastVerified date"
     assert set(tokens["ordering"]["regions"]) == set(gd["REGIONS"].keys()), "region ordering mismatch"
     assert set(tokens["ordering"]["playbooks"]) == set(gd["PLAYBOOK"].keys()), "playbook ordering mismatch"
     for rk in tokens["ordering"]["regions"]:
@@ -61,6 +85,20 @@ def main():
     assert "--serif" in web_css and "--sans" in web_css and "--mono" in web_css
     assert "icon.svg" in web_html and "mast-logo" in web_html
     assert "toggleLarge" in web_html and "toggleContrast" in web_html
+    assert "Content-Security-Policy" in web_html and 'role="tablist"' in web_html and 'aria-live="polite"' in web_html
+
+    # WCAG 2.1 AA contrast checks on default web tokens & styles.css
+    assert contrast_ratio(colors["ink"], colors["paper"]) >= 4.5
+    assert contrast_ratio(colors["ink2"], colors["paper"]) >= 4.5
+    assert contrast_ratio(colors["mute"], colors["paper"]) >= 4.5
+    assert contrast_ratio(colors["mute"], colors["card"]) >= 4.5
+    assert contrast_ratio(colors["tomatoInk"], colors["paper"]) >= 4.5
+    assert contrast_ratio("#FFFFFF", colors["tomatoInk"]) >= 4.5
+    m_ph = re.search(r"input::placeholder[^{]*\{[^}]*color:\s*(#[0-9a-f]{6})", web_css)
+    assert m_ph and contrast_ratio(m_ph.group(1), colors["card"]) >= 4.5, "Placeholder fails WCAG AA"
+    m_gl_ph = re.search(r"\.glance input::placeholder[^{]*\{[^}]*color:\s*(#[0-9a-f]{6})", web_css)
+    assert m_gl_ph and contrast_ratio(m_gl_ph.group(1), colors["ink"]) >= 4.5, "Glance placeholder fails WCAG AA"
+    assert ":focus-visible" in web_css.split("body.high-contrast")[0], "Missing default :focus-visible outline"
 
     # 3. Apple (macOS + iOS) palette, serif/mono fonts, BrandLogoView, UX parity
     apple_theme = read("native/apple/Sources/FamilyGuideUI/Theme.swift")
