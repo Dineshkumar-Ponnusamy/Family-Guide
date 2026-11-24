@@ -10,7 +10,8 @@ let S = load();
 let browserLockPass = null, idleTimer = null, deferredInstallPrompt = null;
 const isStandaloneApp = () => Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator?.standalone);
 const $ = s => document.querySelector(s);
-const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeImgUrl = u => /^data:image\/(?:jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(String(u || "").trim()) ? String(u).trim() : "";
 const safeJson = v => JSON.stringify(v).replace(/<\/script/gi, "<\\/script");
 const uid = p => p + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const hasCrypto = () => Boolean(window.crypto && crypto.subtle && crypto.getRandomValues);
@@ -270,9 +271,9 @@ function photosBlockHtml(b) {
   return `<div class="card${photos.length ? "" : " is-empty"}" data-block-id="${esc(b.id)}" data-block-title="${esc(b.title)}">
     <h3>${esc(b.title)}</h3>
     ${b.hint ? `<p class="hint">${esc(b.hint)}</p>` : ""}
-    ${photos.length ? `<div class="photo-grid">${photos.map(p => `<div class="photo-card">
+    ${photos.length ? `<div class="photo-grid">${photos.filter(p => safeImgUrl(p.dataUrl)).map(p => `<div class="photo-card">
       ${S.readMode ? "" : `<button type="button" class="cx" style="top:4px;right:6px" title="Remove photo" data-delphoto="${esc(p.id)}">✕</button>`}
-      <img src="${esc(p.dataUrl)}" alt="${esc(p.label)}" data-zoom="${esc(p.id)}">
+      <img src="${esc(safeImgUrl(p.dataUrl))}" alt="${esc(p.label)}" data-zoom="${esc(p.id)}">
       <div class="photo-cap">${esc(p.label)}</div>
     </div>`).join("")}</div>` : `<p class="hint" style="margin:4px 0 0">No photos added yet.</p>`}
     ${S.readMode ? "" : `<div class="photo-bar">
@@ -967,8 +968,9 @@ document.addEventListener("click", e => {
   if (rtl) { e.preventDefault(); S.readMode = !S.readMode; save(true, false); render(); return; }
   if (e.target.tagName === "IMG" && e.target.dataset.zoom) {
     const ph = (S.photos || []).find(p => p.id === e.target.dataset.zoom);
-    if (ph) {
-      openDlg(`<h3>${esc(ph.label)}</h3><img src="${esc(ph.dataUrl)}" alt="${esc(ph.label)}" style="width:100%;max-height:70vh;object-fit:contain;border-radius:4px;border:1px solid var(--rule)"><div class="btns"><button type="button" class="btn primary" id="cancelDlg">Close</button></div>`, true);
+    const safeSrc = ph ? safeImgUrl(ph.dataUrl) : "";
+    if (ph && safeSrc) {
+      openDlg(`<h3>${esc(ph.label)}</h3><img src="${esc(safeSrc)}" alt="${esc(ph.label)}" style="width:100%;max-height:70vh;object-fit:contain;border-radius:4px;border:1px solid var(--rule)"><div class="btns"><button type="button" class="btn primary" id="cancelDlg">Close</button></div>`, true);
       $("#cancelDlg").onclick = () => $("#dlg").close();
     }
     return;
@@ -1781,7 +1783,8 @@ body.sheet-mode #app{display:none!important}body.sheet-mode #sheetOnly{display:b
 const TEMPLATE_HTML = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
 let pkg = JSON.parse(document.getElementById("ffg-pkg").textContent);
 const SC = JSON.parse(document.getElementById("ffg-schema").textContent);
-const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeImgUrl = u => /^data:image\\/(?:jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(String(u || "").trim()) ? String(u).trim() : "";
 const safeJson = v => JSON.stringify(v).replace(/<\\/script/gi, "<\\\\/script");
 const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 function b64(buf) {
@@ -1959,7 +1962,7 @@ function renderAll(root, S) {
           if (b.type === "list" && b.id !== "call_log") html += listHtml(b.title, b.id, b.cols);
           if (b.type === "money_guide") html += moneyGuideHtml(b);
           if (b.type === "pro_finder") html += proFinderHtml(b);
-          if (b.type === "photos" && S.photos.length) html += '<div class="card" data-bid="visual_refs" data-btitle="Visual reference photos"><h3>'+esc(b.title)+'</h3><div class="pgrid">'+S.photos.map(ph => '<div class="pcard"><img src="'+esc(ph.dataUrl)+'" alt="'+esc(ph.label)+'" onclick="window.open(this.src)"><div style="font-size:12.5px;font-weight:600;margin-top:4px">'+esc(ph.label)+'</div></div>').join("")+'</div></div>';
+          if (b.type === "photos" && S.photos.length) html += '<div class="card" data-bid="visual_refs" data-btitle="Visual reference photos"><h3>'+esc(b.title)+'</h3><div class="pgrid">'+S.photos.filter(ph => safeImgUrl(ph.dataUrl)).map(ph => '<div class="pcard"><img src="'+esc(safeImgUrl(ph.dataUrl))+'" alt="'+esc(ph.label)+'" onclick="window.open(this.src)"><div style="font-size:12.5px;font-weight:600;margin-top:4px">'+esc(ph.label)+'</div></div>').join("")+'</div></div>';
           if (b.type === "scripts") html += '<div class="card" data-btitle="What to say"><h3>What to say</h3>'+SC.SCRIPTS.map(([st,sb]) => '<div class="script"><b>'+esc(st)+'</b><div><i>'+esc(sb)+'</i></div></div>').join("")+'</div>';
           if (b.type === "letter" && String(S.f.letter||"").trim()) html += '<div class="card" data-btitle="A note to you"><h3>A note to you</h3><div class="val" style="font-family:var(--serif);font-size:17px">'+linkify(S.f.letter)+'</div></div>';
           if (b.type === "kids") { const ks = SC.KIDS.map(([id,em,l]) => fv(em+" "+l, id)).join(""); if (ks) html += '<div class="card" data-bid="kids_card"><div class="grid2">'+ks+'</div></div>'; }

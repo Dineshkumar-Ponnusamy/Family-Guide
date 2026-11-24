@@ -452,7 +452,7 @@ const DEMO_FAMILIES = {
       d_ins: "Premera Blue Cross · Member ID in Apple Wallet & safe",
       h_pharm: "Walgreens on 148th Ave NE",
       d_meds: "No daily meds. Allergic to Penicillin.",
-      h_triage: "Overlake Medical Center (Bellevue) · 425-688-5000",
+      h_triage: "Overlake Medical Center (Bellevue) · 425-555-0195",
       h_portal: "Priya has MyChart proxy access for Rohan & Aarav",
       h_wishes: "Please follow my healthcare directive; prioritize comfort.",
       d_will: "US Will & Trust: Blue safe (original). Separate India Will: parents' locker in Pune + scanned copy in safe.",
@@ -509,9 +509,9 @@ const DEMO_FAMILIES = {
         { platform: "Ledger Nano X + Coinbase", assets: "~0.25 BTC (long-term hold)", access: "Ledger device in blue safe; sealed 24-word metal plate in Pune locker + PIN in 1Password", helper: "Tech friend Arjun Verma (206-555-0139)" }
       ],
       insurance: [
-        { type: "Life (work)", co: "MetLife", amt: "$500,000", benef: "Priya", pol: "9102", phone: "800-638-5433", renew: "Employer" },
-        { type: "Life (personal)", co: "Banner Life", amt: "$700,000", benef: "Priya", pol: "4418", phone: "800-638-8428", renew: "Oct" },
-        { type: "Health", co: "Premera", amt: "Family PPO", benef: "Family", pol: "2219", phone: "800-722-1471", renew: "Jan" }
+        { type: "Life (work)", co: "MetLife", amt: "$500,000", benef: "Priya", pol: "9102", phone: "800-555-0143", renew: "Employer" },
+        { type: "Life (personal)", co: "Banner Life", amt: "$700,000", benef: "Priya", pol: "4418", phone: "800-555-0128", renew: "Oct" },
+        { type: "Health", co: "Premera", amt: "Family PPO", benef: "Family", pol: "2219", phone: "800-555-0171", renew: "Jan" }
       ],
       bills: [
         { name: "Rent", amt: "$3,200", due: "1st", how: "Chase Joint auto-debit" },

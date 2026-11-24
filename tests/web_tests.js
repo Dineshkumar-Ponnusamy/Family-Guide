@@ -208,4 +208,8 @@ window.navigator = { standalone: true };
 assert(isStandaloneApp() === true, "PWA standalone mode counts as standalone app");
 delete window.navigator;
 
+assert(safeImgUrl("javascript:alert(1)") === "", "reject javascript URI in photo");
+assert(safeImgUrl("data:text/html;base64,PHNjcmlwdD4=") === "", "reject html data URI in photo");
+assert(safeImgUrl("data:image/jpeg;base64,/9j/4AAQ") === "data:image/jpeg;base64,/9j/4AAQ", "accept valid image data URI");
+
 outPrint("ALL_WEB_TESTS_PASSED");

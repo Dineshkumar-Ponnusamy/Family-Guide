@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Family-Guide}/native/apple",
+            "name": "Debug FamilyGuideMac (native/apple)",
+            "target": "FamilyGuideMac",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug FamilyGuideMac (native/apple)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Family-Guide}/native/apple",
+            "name": "Release FamilyGuideMac (native/apple)",
+            "target": "FamilyGuideMac",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release FamilyGuideMac (native/apple)"
+        }
+    ]
+}

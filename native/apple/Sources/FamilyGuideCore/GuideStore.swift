@@ -27,6 +27,10 @@ public final class GuideStore {
             dir = appSup.appendingPathComponent("FamilyFieldGuide", isDirectory: true)
         }
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var backupValues = URLResourceValues()
+        backupValues.isExcludedFromBackup = true
+        var mutableDir = dir
+        try? mutableDir.setResourceValues(backupValues)
         self.stateURL = dir.appendingPathComponent("state.json")
 
         if let saved = try? Data(contentsOf: stateURL),

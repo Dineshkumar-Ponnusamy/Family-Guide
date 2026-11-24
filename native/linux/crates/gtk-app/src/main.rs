@@ -10,8 +10,8 @@ use family_guide_core::store::GuideStore;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Application, ApplicationWindow, Box as GtkBox, Button, CheckButton, DropDown, Entry,
-    Frame, Grid, HeaderBar, Label, Orientation, Overlay, Paned, ProgressBar, ScrolledWindow,
-    TextView, ToggleButton, WrapMode,
+    Frame, Grid, HeaderBar, Label, Orientation, Overlay, Paned, PasswordEntry, ProgressBar,
+    ScrolledWindow, TextView, ToggleButton, Window, WrapMode,
 };
 
 use dialogs::{
@@ -49,6 +49,7 @@ fn build_ui(app: &Application) {
         }),
     ));
     let is_syncing = Rc::new(Cell::new(false));
+    let session_lock_pass: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
 
     let win = ApplicationWindow::builder()
         .application(app)
@@ -179,13 +180,21 @@ fn build_ui(app: &Application) {
     lock_logo.set_halign(Align::Center);
     let lock_title = Label::new(Some("Our Family Field Guide is Locked"));
     lock_title.add_css_class("ffg-title");
-    let lock_sub = Label::new(Some("100% offline. Keep private family notes hidden when stepping away."));
+    let lock_sub = Label::new(Some("Enter your session lock passphrase to continue."));
     lock_sub.add_css_class("ffg-muted");
+    let lock_pass_entry = PasswordEntry::builder()
+        .placeholder_text("Session passphrase")
+        .show_peek_icon(true)
+        .build();
+    let lock_err_lbl = Label::new(None);
+    lock_err_lbl.add_css_class("ffg-eyebrow");
     let unlock_btn = Button::with_label("Unlock Guide");
     unlock_btn.add_css_class("suggested-action");
     lock_box.append(&lock_logo);
     lock_box.append(&lock_title);
     lock_box.append(&lock_sub);
+    lock_box.append(&lock_pass_entry);
+    lock_box.append(&lock_err_lbl);
     lock_box.append(&unlock_btn);
     lock_box.set_visible(false);
     overlay.add_overlay(&lock_box);
@@ -490,20 +499,85 @@ fn build_ui(app: &Application) {
     }
 
     {
+        let win_l = win.clone();
         let lock_box_c = lock_box.clone();
         let paned_c = paned.clone();
+        let pass_store = session_lock_pass.clone();
+        let entry_clear = lock_pass_entry.clone();
+        let err_clear = lock_err_lbl.clone();
         lock_btn.connect_clicked(move |_| {
-            paned_c.set_visible(false);
-            lock_box_c.set_visible(true);
+            let modal = Window::builder()
+                .transient_for(&win_l)
+                .modal(true)
+                .title("Lock Session")
+                .default_width(380)
+                .default_height(170)
+                .build();
+            let vbox = GtkBox::new(Orientation::Vertical, 10);
+            vbox.set_margin_top(14);
+            vbox.set_margin_bottom(14);
+            vbox.set_margin_start(14);
+            vbox.set_margin_end(14);
+            let lbl = Label::new(Some("Set a quick passphrase to lock this window:"));
+            lbl.set_halign(Align::Start);
+            let pw_in = PasswordEntry::builder()
+                .placeholder_text("Session passphrase")
+                .show_peek_icon(true)
+                .build();
+            let msg_lbl = Label::new(None);
+            msg_lbl.add_css_class("ffg-eyebrow");
+            let go_btn = Button::with_label("Lock");
+            go_btn.add_css_class("suggested-action");
+            go_btn.set_halign(Align::End);
+            vbox.append(&lbl);
+            vbox.append(&pw_in);
+            vbox.append(&msg_lbl);
+            vbox.append(&go_btn);
+            modal.set_child(Some(&vbox));
+
+            let modal_c = modal.clone();
+            let lock_box_w = lock_box_c.clone();
+            let paned_w = paned_c.clone();
+            let pass_w = pass_store.clone();
+            let entry_w = entry_clear.clone();
+            let err_w = err_clear.clone();
+            go_btn.connect_clicked(move |_| {
+                let pw = pw_in.text().to_string();
+                if pw.is_empty() {
+                    msg_lbl.set_text("Enter a passphrase to lock.");
+                    return;
+                }
+                *pass_w.borrow_mut() = Some(pw);
+                entry_w.set_text("");
+                err_w.set_text("");
+                paned_w.set_visible(false);
+                lock_box_w.set_visible(true);
+                modal_c.close();
+            });
+            modal.present();
         });
     }
 
     {
         let lock_box_c = lock_box.clone();
         let paned_c = paned.clone();
+        let pass_store = session_lock_pass.clone();
+        let entry_u = lock_pass_entry.clone();
+        let err_u = lock_err_lbl.clone();
         unlock_btn.connect_clicked(move |_| {
-            lock_box_c.set_visible(false);
-            paned_c.set_visible(true);
+            let entered = entry_u.text().to_string();
+            let matches = pass_store
+                .borrow()
+                .as_deref()
+                .is_some_and(|expected| expected == entered);
+            if matches {
+                entry_u.set_text("");
+                err_u.set_text("");
+                lock_box_c.set_visible(false);
+                paned_c.set_visible(true);
+            } else {
+                err_u.set_text("Wrong passphrase.");
+            }
         });
     }
 

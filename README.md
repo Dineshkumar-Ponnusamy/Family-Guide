@@ -70,11 +70,11 @@ All native builds and offline web packages are built and published from source b
 | Platform | Tech Stack | Release Package | Install / Notes |
 |---|---|---|---|
 | **Web / PWA** | Vanilla HTML, CSS, JS *(zero deps)* | [Live Web App](https://dineshkumar-ponnusamy.github.io/Family-Guide/) or `Our-Family-Field-Guide-Web-Offline.zip` | Works offline from `index.html` or install via browser **Install App** / Safari **Add to Home Screen** |
-| **macOS (14+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-macOS-arm64.dmg` | Drag **Our Family Field Guide.app** to Applications; supports Touch ID lock |
+| **macOS (14+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-macOS-arm64.dmg` | Apple Silicon (`arm64`), ad-hoc signed; allow in **System Settings → Privacy & Security → Open Anyway** |
 | **iOS (17+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-iOS-Xcode-Source.zip` | Local Swift Package + Face ID `@main` entry (`native/apple/`) for Xcode |
-| **Android (8.0+)** | Pure Kotlin + Jetpack Compose (M3) | `Our-Family-Field-Guide-Android.apk` | **Zero `INTERNET` permission** in `AndroidManifest.xml`; supports BiometricPrompt lock |
+| **Android (8.0+)** | Pure Kotlin + Jetpack Compose (M3) | `Our-Family-Field-Guide-Android.apk` | **Zero `INTERNET` permission**, debug-signed sideload APK, `BiometricPrompt` lock |
 | **Windows (x64)** | Pure C# + .NET 8 + WPF | `Our-Family-Field-Guide-Windows-x64.exe` | Single-file portable `.exe` with native Windows `PrintDialog` |
-| **Linux (GTK4)** | Pure Rust + `gtk4-rs` *(zero WebView)* | `Our-Family-Field-Guide-Linux-x86_64.tar.gz` | Extract & run `./install.sh` (installs binary, SVG icon & `.desktop` entry) |
+| **Linux (GTK4)** | Pure Rust + `gtk4-rs` *(zero WebView)* | `Our-Family-Field-Guide-Linux-x86_64.tar.gz` | Ubuntu 24.04+ / modern Linux (`glibc 2.39+`, `GTK 4.12+`); extract & run `./install.sh` |
 
 > **Latest Downloads:** [Releases Page](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/releases/latest)
 
