@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Our Family Field Guide
+Comment=Private 100% offline emergency, medical care & digital legacy guide
+Exec=family-field-guide
+Icon=family-field-guide
+Terminal=false
+Categories=Utility;Office;
+Keywords=emergency;family;medical;backup;offline;
+StartupWMClass=io.github.dineshkumarponnusamy.familyfieldguide

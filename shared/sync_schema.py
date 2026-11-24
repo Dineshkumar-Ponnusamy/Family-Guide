@@ -13,6 +13,7 @@ TARGETS = [
     os.path.join(ROOT, "native", "apple", "Sources", "FamilyGuideCore", "Resources", "guide-data.json"),
     os.path.join(ROOT, "native", "android", "app", "src", "main", "assets", "guide-data.json"),
     os.path.join(ROOT, "native", "windows", "FamilyGuide.Core", "Resources", "guide-data.json"),
+    os.path.join(ROOT, "native", "linux", "crates", "core", "assets", "guide-data.json"),
 ]
 
 JS_DUMP = r'''

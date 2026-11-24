@@ -1,0 +1,15 @@
+[package]
+name = "family-guide-gtk"
+version = "1.0.0"
+edition = "2021"
+description = "Pure native Linux GTK4 desktop app for Our Family Field Guide."
+license = "MIT"
+
+[[bin]]
+name = "family-field-guide"
+path = "src/main.rs"
+
+[dependencies]
+family-guide-core = { path = "../core" }
+gtk4 = { version = "0.9", features = ["v4_12"] }
+serde_json = "1"

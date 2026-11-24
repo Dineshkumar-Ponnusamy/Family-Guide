@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "crates/core",
+    "crates/gtk-app",
+]
+resolver = "2"
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
+opt-level = 3

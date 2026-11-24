@@ -33,3 +33,7 @@ native/windows/**/bin/
 native/windows/**/obj/
 native/windows/.vs/
 native/windows/publish/
+
+# Pure native Linux (Rust / Cargo) build artifacts
+native/linux/target/
+native/linux/dist/

@@ -1,0 +1,62 @@
+name: Build Linux App (Rust + GTK4)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "native/linux/**"
+      - "shared/guide-data.json"
+      - ".github/workflows/linux.yml"
+  pull_request:
+    paths:
+      - "native/linux/**"
+      - "shared/guide-data.json"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install GTK4 development libraries
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev pkg-config build-essential
+
+      - name: Setup Node.js (for schema sync)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Python & sync shared schema JSON
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 shared/sync_schema.py
+
+      - name: Setup Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo crates & build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/linux
+
+      - name: Run Rust Core unit tests
+        run: cargo test --manifest-path native/linux/Cargo.toml -p family-guide-core
+
+      - name: Build pure native GTK4 release binary
+        run: cargo build --manifest-path native/linux/Cargo.toml --release -p family-guide-gtk
+
+      - name: Stage Linux distribution bundle
+        run: |
+          mkdir -p native/linux/dist
+          cp native/linux/target/release/family-field-guide native/linux/dist/
+          cp native/linux/family-field-guide.desktop native/linux/dist/
+          cp icon.svg native/linux/dist/family-field-guide.svg
+
+      - name: Upload Linux binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-field-guide-linux-x86_64
+          path: native/linux/dist/
