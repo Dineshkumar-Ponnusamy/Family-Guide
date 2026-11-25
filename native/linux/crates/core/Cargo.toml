@@ -9,7 +9,7 @@ license = "MIT"
 aes-gcm = "0.10"
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-hmac = "0.12"
+hmac = "0.13"
 pbkdf2 = { version = "0.12", features = ["hmac"] }
 rand = "0.8"
 regex = "1"
