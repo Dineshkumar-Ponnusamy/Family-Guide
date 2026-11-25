@@ -19,7 +19,7 @@ jobs:
     name: Web / PWA Offline Bundle
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -56,7 +56,7 @@ jobs:
     name: Apple (macOS .dmg & iOS Source)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -161,7 +161,7 @@ jobs:
     name: Android (.apk)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v4
         with:
@@ -226,7 +226,7 @@ jobs:
     name: Windows (Single-File .exe)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -273,7 +273,7 @@ jobs:
     name: Linux (GTK4 .tar.gz)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install GTK4 development libraries
         run: |
@@ -346,7 +346,7 @@ jobs:
     needs: [web-bundle, macos-and-ios, android, windows, linux]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v4
         with:
