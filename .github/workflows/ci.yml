@@ -68,7 +68,7 @@ jobs:
               lv = datetime.date.fromisoformat(v["lastVerified"])
               age = (today - lv).days
               if age > 365:
-                  print(f"::warning::Region preset {k!r} lastVerified ({v[\"lastVerified\"]}) is {age} days old — review regulatory caps & directories.")
+                  print(f"::warning::Region preset {k!r} lastVerified ({lv}) is {age} days old — review regulatory caps & directories.")
           '
 
   e2e:
