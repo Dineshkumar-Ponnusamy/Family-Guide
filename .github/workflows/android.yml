@@ -55,7 +55,7 @@ jobs:
           unzip -l "$APK" | grep -q "assets/guide-data.json"
 
       - name: Upload Android APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: family-field-guide-android-debug
           path: native/android/app/build/outputs/apk/debug/*.apk
