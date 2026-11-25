@@ -587,7 +587,28 @@ function render() {
     return `<section class="panel ${S.tab === t.id ? "on" : ""}" role="tabpanel" aria-labelledby="tab-${esc(t.id)}" id="p-${esc(t.id)}"><h2>${esc(t.title)}</h2><p class="lede">${esc(t.lede)}</p>${body}</section>`;
   }).join("");
   document.querySelectorAll("textarea[data-f]").forEach(autoGrow);
-  meter(); trackProgress(); syncInstallBtn();
+  meter(); trackProgress(); syncInstallBtn(); syncActiveTabScroll();
+}
+
+function syncActiveTabScroll() {
+  const nav = $("#tabs");
+  const active = nav?.querySelector?.("button.on");
+  if (nav && active && typeof nav.scrollTo === "function" && nav.scrollWidth > nav.clientWidth) {
+    const targetLeft = Math.max(0, active.offsetLeft - Math.round((nav.clientWidth - active.offsetWidth) / 2));
+    nav.scrollTo({ left: targetLeft, behavior: "smooth" });
+  }
+}
+
+function scrollToActivePanel() {
+  const isMobile = typeof window !== "undefined" && Number(window.innerWidth) > 0 && window.innerWidth <= 720;
+  const nav = $("#tabs"), panels = $("#panels");
+  if (isMobile && panels && typeof panels.getBoundingClientRect === "function") {
+    const navH = nav && typeof nav.getBoundingClientRect === "function" ? nav.getBoundingClientRect().height : 44;
+    const y = (window.scrollY || 0) + panels.getBoundingClientRect().top - navH - 6;
+    scrollTo({ top: Math.max(0, Math.round(y)), behavior: "smooth" });
+  } else {
+    scrollTo({ top: 0, behavior: "smooth" });
+  }
 }
 
 function syncInstallBtn() {
@@ -816,7 +837,7 @@ function jumpTo(tabId, blockKey = "", fieldId = "", trackKey = "") {
       if (inp && typeof inp.focus === "function") inp.focus({ preventScroll: true });
     }
   } else {
-    scrollTo({ top: 0, behavior: "smooth" });
+    scrollToActivePanel();
   }
 }
 
@@ -1010,6 +1031,22 @@ document.addEventListener("keydown", e => {
   }
 });
 
+document.addEventListener("focusin", e => {
+  const tag = e.target?.tagName || "";
+  if (e.target?.closest?.("#panels") && ["INPUT", "TEXTAREA", "SELECT"].includes(tag)) {
+    document.body.classList.add("mobile-editing");
+  }
+});
+document.addEventListener("focusout", () => {
+  setTimeout(() => {
+    const ae = document.activeElement;
+    const tag = ae?.tagName || "";
+    if (!ae?.closest?.("#panels") || !["INPUT", "TEXTAREA", "SELECT"].includes(tag)) {
+      document.body.classList.remove("mobile-editing");
+    }
+  }, 80);
+});
+
 document.addEventListener("click", e => {
   if (!e.target.closest("#searchbar")) {
     $("#searchRes").hidden = true;
@@ -1042,7 +1079,7 @@ document.addEventListener("click", e => {
   }
 
   const d = e.target.closest("button")?.dataset; if (!d) return;
-  if (d.tab) { S.tab = d.tab; save(true, false); render(); scrollTo({ top: 0, behavior: "smooth" }); }
+  if (d.tab) { S.tab = d.tab; save(true, false); render(); scrollToActivePanel(); }
   if (d.track) { S.track = d.track; save(true, false); document.querySelectorAll("[data-track]").forEach(b => b.classList.toggle("on", b.dataset.track === d.track)); $("#pb").innerHTML = playbook(); trackProgress(); }
   if (d.add) { S.lists[d.add].push({}); save(true); relist(d.add); }
   if (d.qadd) {
@@ -1829,6 +1866,7 @@ input[type=password],.cardin{width:100%;font:15px var(--sans);padding:9px 10px;b
 .pcard img{width:100%;height:120px;object-fit:cover;border-radius:3px;cursor:zoom-in}
 #sheetOnly{display:none;max-width:780px;margin:0 auto}.sgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .sboxc{border:1px solid #bbb;border-radius:4px;padding:10px 12px}.sboxc.full{grid-column:1/-1}.sboxc h3{margin:0 0 6px;font-size:16px;border-bottom:1px solid #ddd;padding-bottom:3px}
+@media (max-width:720px){body{padding:14px 12px 48px}.bar{gap:6px;padding-bottom:10px;margin-bottom:10px}.bar h1{font-size:24px;margin-bottom:2px}.bar .acts{width:100%;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}.bar .acts::-webkit-scrollbar,.tabs::-webkit-scrollbar{display:none}.bar .acts .btn,.tabs button{flex:0 0 auto;white-space:nowrap;padding:5px 11px;font-size:12px}.tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:0 -12px 12px;padding:6px 12px;position:sticky;top:0;background:var(--paper);z-index:5;border-bottom:1px dashed var(--rule)}.sgrid{grid-template-columns:minmax(0,1fr)}}
 @media print{.tabs,.bar .acts,.track,.sbox,.rx,.addbtn{display:none!important}.panel{display:block!important;break-before:page}.panel:first-of-type{break-before:auto}
 body.sheet-mode #app{display:none!important}body.sheet-mode #sheetOnly{display:block!important}}
 </style>

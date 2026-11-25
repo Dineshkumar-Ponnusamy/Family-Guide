@@ -304,4 +304,19 @@ S = {}; norm();
 quickStartWizard();
 assert(els.dlgForm.innerHTML.includes("qsFirst") && els.dlgForm.innerHTML.includes("qsPm"), "quickStartWizard renders guided setup");
 
+// 14. Mobile tab bar & panel scroll behavior
+assert(saHtml.includes("@media (max-width:720px)") && saHtml.includes("flex-wrap:nowrap;overflow-x:auto"), "standalone html has single-row mobile tabs");
+let lastScrollTop = -1;
+globalThis.scrollTo = opts => { lastScrollTop = opts && typeof opts === "object" ? opts.top : opts; };
+globalThis.window.innerWidth = 390;
+globalThis.window.scrollY = 260;
+els.tabs.getBoundingClientRect = () => ({ height: 42 });
+els.panels.getBoundingClientRect = () => ({ top: 120 });
+scrollToActivePanel();
+assert(lastScrollTop === 332, "mobile scrollToActivePanel scrolls directly below slim tab bar");
+globalThis.window.innerWidth = 1280;
+scrollToActivePanel();
+assert(lastScrollTop === 0, "desktop scrollToActivePanel scrolls to top");
+globalThis.scrollTo = () => {};
+
 outPrint("ALL_WEB_TESTS_PASSED");

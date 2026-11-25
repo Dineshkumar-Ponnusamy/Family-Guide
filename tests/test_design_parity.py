@@ -99,6 +99,7 @@ def main():
     m_gl_ph = re.search(r"\.glance input::placeholder[^{]*\{[^}]*color:\s*(#[0-9a-f]{6})", web_css)
     assert m_gl_ph and contrast_ratio(m_gl_ph.group(1), colors["ink"]) >= 4.5, "Glance placeholder fails WCAG AA"
     assert ":focus-visible" in web_css.split("body.high-contrast")[0], "Missing default :focus-visible outline"
+    assert "flex-wrap:nowrap;overflow-x:auto" in web_css and "body.mobile-editing nav.tabs" in web_css, "Mobile tab bar must stay single-row scrollable and unstick while editing"
 
     # 3. Apple (macOS + iOS) palette, serif/mono fonts, BrandLogoView, UX parity
     apple_theme = read("native/apple/Sources/FamilyGuideUI/Theme.swift")
