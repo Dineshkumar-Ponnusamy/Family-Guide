@@ -47,7 +47,7 @@ jobs:
           done
           rm -rf /tmp/ffg-web-verify
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-web
           path: Our-Family-Field-Guide-Web-Offline.zip
@@ -150,7 +150,7 @@ jobs:
           cp shared/BACKUP_FORMAT.md LICENSE ios-pkg/Our-Family-Field-Guide-iOS/
           (cd ios-pkg && zip -r ../Our-Family-Field-Guide-iOS-Xcode-Source.zip Our-Family-Field-Guide-iOS)
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-apple
           path: |
@@ -217,7 +217,7 @@ jobs:
           fi
           unzip -l "$APK_FILE" | grep -q "assets/guide-data.json"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-android
           path: Our-Family-Field-Guide-Android*.apk
@@ -264,7 +264,7 @@ jobs:
           if ($gui.HasExited) { throw "Windows GUI exited prematurely with $($gui.ExitCode)" }
           Stop-Process -Id $gui.Id -Force
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-windows
           path: Our-Family-Field-Guide-Windows-x64.exe
@@ -336,7 +336,7 @@ jobs:
           wait "$GUI_PID" 2>/dev/null || true
           rm -rf /tmp/ffg-linux-verify
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-linux
           path: Our-Family-Field-Guide-Linux-x86_64.tar.gz
