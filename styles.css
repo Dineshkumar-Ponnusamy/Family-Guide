@@ -109,7 +109,7 @@ h2{font-family:var(--serif);font-size:30px;margin:0 0 4px;font-weight:600}
   .meter{text-align:left;min-width:0}
   .meter b{font-size:30px;display:inline-block;margin-left:8px;vertical-align:baseline}
   .privacy{margin:10px 0 0;padding:9px 12px;font-size:12.5px}
-  nav.tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:7px 14px;margin:0 -14px;gap:6px;align-items:center}
+  nav.tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:7px 26px 7px 14px;margin:0 -14px;gap:6px;align-items:center;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 22px),transparent)}
   nav.tabs::-webkit-scrollbar{display:none}
   nav.tabs button{flex:0 0 auto;white-space:nowrap;padding:6px 11px;font-size:12.5px}
   nav.tabs .spacer{display:none}

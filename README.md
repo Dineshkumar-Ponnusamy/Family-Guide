@@ -63,13 +63,19 @@ If something happens and you can't be there—an accident, a sudden 2 AM ER visi
 
 ---
 
-## Download & Install (All 6 Platforms)
+## Use It Now (Flagship Web App — Zero Install, 100% Offline)
 
-All native builds and offline web packages are built and published from source by GitHub Actions on every release tag (`SHA256SUMS.txt` included on every release).
+> **Recommended for almost everyone:** Open the **[Live Web App](https://dineshkumar-ponnusamy.github.io/Family-Guide/)** in any modern browser (phone, tablet, or desktop). It works 100% offline, can be installed to your home screen/dock via **Install App** (or Safari **Add to Home Screen**), and exports self-contained encrypted `.html` backups that open in any browser years from now—with zero OS installer warnings.
+>
+> Want a local offline copy instead? Download `Our-Family-Field-Guide-Web-Offline.zip` from the [Latest Release](https://github.com/Dineshkumar-Ponnusamy/Family-Guide/releases/latest) and open `index.html`.
+
+<details>
+<summary><b>Native Developer Previews (macOS, iOS, Android, Windows, Linux — Power Users)</b></summary>
+
+All 5 pure native apps are built from source by GitHub Actions on every release tag (`SHA256SUMS.txt` included) and share byte-for-byte compatible **AES-256-GCM** encrypted backups with the Web PWA. Because these are **unsigned / ad-hoc signed Developer Previews** (outside the App Store / Play Store), your OS may show an unidentified-developer warning on first launch.
 
 | Platform | Tech Stack | Release Package | Install / Notes |
 |---|---|---|---|
-| **Web / PWA (Flagship)** | Vanilla HTML, CSS, JS *(zero deps)* | [Live Web App](https://dineshkumar-ponnusamy.github.io/Family-Guide/) or `Our-Family-Field-Guide-Web-Offline.zip` | Works offline from `index.html` or install via browser **Install App** / Safari **Add to Home Screen** |
 | **macOS (14+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-macOS-arm64.dmg` | **Developer Preview** — Apple Silicon (`arm64`), ad-hoc signed; allow in **System Settings → Privacy & Security → Open Anyway** |
 | **iOS (17+)** | Pure Swift + SwiftUI + CryptoKit | `Our-Family-Field-Guide-iOS-Xcode-Source.zip` | **Developer Preview** — Local Swift Package + Face ID `@main` entry (`native/apple/`) for Xcode |
 | **Android (8.0+)** | Pure Kotlin + Jetpack Compose (M3) | `Our-Family-Field-Guide-Android.apk` *(signed)* or `Our-Family-Field-Guide-Android-PREVIEW-debug.apk` | **Zero `INTERNET` permission**; `-PREVIEW-debug.apk` is a debug-signed preview that cannot upgrade a signed release in place |
@@ -88,6 +94,8 @@ All native builds and offline web packages are built and published from source b
 | **Android** | No (imports `.html`) | Export `.json` · Import `.json` & `.html` | Preserved in backup state (no photo picker UI) | Android Share Intent (Summary & ER Grab Sheet) | **Developer Preview** — Debug preview APK unless CI keystore secrets sign release APK (not on Play Store) |
 | **Windows** | No (imports `.html`) | Export `.json` · Import `.json` & `.html` | Preserved in backup state (no photo picker UI) | Native Windows `PrintDialog` (Summary & ER Grab Sheet) | **Developer Preview** — Unsigned portable `.exe` (not Authenticode-signed) |
 | **Linux** | No (imports `.html`) | Export `.json` · Import `.json` & `.html` | Preserved in backup state (no photo picker UI) | Save printable `.txt` sheets (Summary & ER Grab Sheet) | **Developer Preview** — Unsigned `.tar.gz` binary bundle (not on distro repos/Flathub) |
+
+</details>
 
 ---
 

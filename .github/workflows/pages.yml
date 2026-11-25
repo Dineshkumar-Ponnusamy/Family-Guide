@@ -15,10 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -30,7 +27,7 @@ jobs:
       - name: Stage static Web PWA files
         run: |
           mkdir -p _site
-          cp index.html styles.css schema.js regions.js app.js manifest.json sw.js \
+          cp index.html styles.css schema.js regions.js crypto.js standalone.js app.js manifest.json sw.js \
              icon.svg icon-192.png icon-512.png apple-touch-icon.png _site/
           touch _site/.nojekyll
 
@@ -39,6 +36,13 @@ jobs:
         with:
           path: _site
 
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

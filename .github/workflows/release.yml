@@ -33,7 +33,7 @@ jobs:
       - name: Package Offline Web / PWA Zip
         run: |
           mkdir -p web-pkg/Our-Family-Field-Guide-Web
-          cp index.html styles.css schema.js regions.js app.js manifest.json sw.js \
+          cp index.html styles.css schema.js regions.js crypto.js standalone.js app.js manifest.json sw.js \
              icon.svg icon-192.png icon-512.png apple-touch-icon.png \
              README.md LICENSE SECURITY.md web-pkg/Our-Family-Field-Guide-Web/
           (cd web-pkg && zip -r ../Our-Family-Field-Guide-Web-Offline.zip Our-Family-Field-Guide-Web)
@@ -42,7 +42,7 @@ jobs:
         run: |
           rm -rf /tmp/ffg-web-verify
           unzip -q Our-Family-Field-Guide-Web-Offline.zip -d /tmp/ffg-web-verify
-          for f in index.html styles.css schema.js regions.js app.js manifest.json sw.js icon.svg icon-192.png icon-512.png apple-touch-icon.png; do
+          for f in index.html styles.css schema.js regions.js crypto.js standalone.js app.js manifest.json sw.js icon.svg icon-192.png icon-512.png apple-touch-icon.png; do
             test -s "/tmp/ffg-web-verify/Our-Family-Field-Guide-Web/$f"
           done
           rm -rf /tmp/ffg-web-verify

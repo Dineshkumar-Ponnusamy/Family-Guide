@@ -1,10 +1,12 @@
-const CACHE = "ffg-v10";
+const CACHE = "ffg-v12";
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./schema.js",
   "./regions.js",
+  "./crypto.js",
+  "./standalone.js",
   "./app.js",
   "./manifest.json",
   "./icon.svg",

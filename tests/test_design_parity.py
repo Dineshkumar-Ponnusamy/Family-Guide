@@ -56,11 +56,16 @@ def main():
     for sp in schema_paths:
         assert read_bytes(sp) == ref_bytes, f"guide-data.json out of sync: {sp}"
     gd = json.loads(ref_bytes)
-    live_parsed = {}
-    for js_rel in ["schema.js", "regions.js"]:
-        live_parsed.update(sync_schema._JsStaticParser(read(js_rel)).parse_top_level())
-    live_payload = {k: live_parsed[k] for k in sync_schema.EXPORT_KEYS}
-    assert live_payload == gd, "shared/guide-data.json has drifted from schema.js / regions.js! Run python3 shared/sync_schema.py"
+    schema_header = (
+        "/* AUTO-GENERATED from shared/guide-data.json — do not edit directly.\n"
+        "   Edit shared/guide-data.json and run `python3 shared/sync_schema.py`. */"
+    )
+    regions_header = (
+        "/* AUTO-GENERATED from shared/guide-data.json — do not edit directly.\n"
+        "   Edit shared/guide-data.json and run `python3 shared/sync_schema.py`. */"
+    )
+    assert read("schema.js") == sync_schema.render_js_module(schema_header, gd, sync_schema.SCHEMA_KEYS), "schema.js has drifted from shared/guide-data.json! Run python3 shared/sync_schema.py"
+    assert read("regions.js") == sync_schema.render_js_module(regions_header, gd, sync_schema.REGION_KEYS), "regions.js has drifted from shared/guide-data.json! Run python3 shared/sync_schema.py"
     assert len(gd["DICE_WORDS"]) >= 2048 and len(set(gd["DICE_WORDS"])) == len(gd["DICE_WORDS"]), "DICE_WORDS must have >=2048 unique words"
     for rk, rv in gd["REGIONS"].items():
         assert rv.get("lastVerified"), f"Region {rk} missing lastVerified date"
@@ -86,6 +91,8 @@ def main():
     assert "icon.svg" in web_html and "mast-logo" in web_html
     assert "toggleLarge" in web_html and "toggleContrast" in web_html
     assert "Content-Security-Policy" in web_html and 'role="tablist"' in web_html and 'aria-live="polite"' in web_html
+    assert 'role="combobox"' in web_html and 'role="listbox"' in web_html, "Missing WAI-ARIA combobox/listbox on search"
+    assert "browserLockPass" not in read("app.js"), "Plaintext browserLockPass must not be retained in RAM"
 
     # WCAG 2.1 AA contrast checks on default web tokens & styles.css
     assert contrast_ratio(colors["ink"], colors["paper"]) >= 4.5

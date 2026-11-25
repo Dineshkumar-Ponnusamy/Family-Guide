@@ -5,7 +5,7 @@
 ## Privacy Guarantees
 
 - **Zero backend / zero telemetry:** Neither the Web PWA nor any native app makes network requests, uses analytics or crash trackers, or loads external scripts, fonts, or stylesheets.
-- **Strict Web Content Security Policy (CSP):** `index.html` enforces `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self';`, blocking external script/network execution and `object`/`base` injection.
+- **Strict Web Content Security Policy (CSP):** `index.html` enforces `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'self';`, and exported standalone `.html` backups enforce `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none';`, blocking external network exfiltration and `object`/`base` injection.
 - **OS-enforced offline on Android:** `AndroidManifest.xml` declares zero `<uses-permission>` entries (not even `android.permission.INTERNET`) and disables Android Auto Backup (`android:allowBackup="false"`).
 - **No cloud backup leakage on Apple (iOS / macOS):** The local storage directory (`Application Support/FamilyFieldGuide`) is marked `isExcludedFromBackup = true` so local data stays off unencrypted/automatic iCloud device backups.
 
@@ -28,7 +28,7 @@
 1. **Web / PWA:**
    - Unencrypted mode saves locally in `localStorage` (`familyFieldGuide.v1`).
    - Enabling **Lock** encrypts local storage into `familyFieldGuide.locked.v1` (`AES-256-GCM`) and removes the unencrypted key.
-   - On lock or after **15 minutes of inactivity**, the app wipes the visible DOM (`panels`, `printSheet`, banners, search results) and clears in-memory state/key variables (`S`, `browserLockPass`, `browserLockKey`, `browserLockSalt`), and supports unlocking via passphrase or **2-of-3 Recovery Cards (`FFG-1-...`)** (both in-browser lock and standalone `.html` backups).
+   - On lock or after **15 minutes of inactivity**, the app wipes the visible DOM (`panels`, `printSheet`, banners, search results) and clears in-memory state/key references (`S`, `browserLockKey`, `browserLockSalt`; the raw passphrase string is never retained in RAM after deriving the non-extractable `CryptoKey`), and supports unlocking via passphrase or **2-of-3 Recovery Cards (`FFG-1-...`)** (both in-browser lock and standalone `.html` backups).
 2. **Android:**
    - Stores data in internal `filesDir` with **`AndroidKeyStore`-backed encryption**, sets **`FLAG_SECURE`** to block screenshots and OS task-switcher previews, and supports **`BiometricPrompt`** lock.
    - **Release signing behavior:** CI signs `Our-Family-Field-Guide-Android.apk` with `assembleRelease` only when release keystore secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) are configured; otherwise CI builds and labels `Our-Family-Field-Guide-Android-PREVIEW-debug.apk` so debug builds are never mistaken for production upgrade-compatible releases.

@@ -45,8 +45,8 @@
   <div class="searchbar" id="searchbar">
     <div class="search-row">
       <div class="search-box">
-        <input type="search" id="searchIn" placeholder="Search guide… (press /)" aria-label="Search guide" autocomplete="off">
-        <div class="search-res" id="searchRes" hidden></div>
+        <input type="search" id="searchIn" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="searchRes" placeholder="Search guide… (press /)" aria-label="Search guide" autocomplete="off">
+        <div class="search-res" id="searchRes" role="listbox" hidden></div>
       </div>
       <div class="comfort-btns">
         <select id="regionSel" aria-label="Country or region"></select>
@@ -69,6 +69,8 @@
 
 <script src="schema.js"></script>
 <script src="regions.js"></script>
+<script src="crypto.js"></script>
+<script src="standalone.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

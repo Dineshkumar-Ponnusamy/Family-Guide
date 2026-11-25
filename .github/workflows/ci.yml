@@ -18,10 +18,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Verify shared schema is in sync with schema.js & regions.js
+      - name: Verify shared schema is in sync with schema.js, regions.js & native/
         run: |
           python3 shared/sync_schema.py
-          git diff --exit-code shared/guide-data.json native/
+          git diff --exit-code shared/guide-data.json schema.js regions.js native/
 
       - name: Verify sw.js CACHE version bump when cached web assets change (PRs)
         if: github.event_name == 'pull_request'
@@ -29,7 +29,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_REF"
-          CHANGED=$(git diff --name-only FETCH_HEAD HEAD -- app.js styles.css index.html schema.js regions.js manifest.json)
+          CHANGED=$(git diff --name-only FETCH_HEAD HEAD -- app.js crypto.js standalone.js styles.css index.html schema.js regions.js manifest.json)
           if [ -n "$CHANGED" ]; then
             echo "Cached web assets changed:"
             echo "$CHANGED"
@@ -49,9 +49,45 @@ jobs:
         run: |
           node --check schema.js
           node --check regions.js
+          node --check crypto.js
+          node --check standalone.js
           node --check app.js
           node --check sw.js
           node tests/web_tests.js
 
       - name: Run Cross-Platform Design, Logo & Schema Parity checks
         run: python3 tests/test_design_parity.py
+
+      - name: Check region preset lastVerified freshness (advisory)
+        run: |
+          python3 -c '
+          import datetime, json
+          gd = json.load(open("shared/guide-data.json", encoding="utf-8"))
+          today = datetime.date.today()
+          for k, v in gd["REGIONS"].items():
+              lv = datetime.date.fromisoformat(v["lastVerified"])
+              age = (today - lv).days
+              if age > 365:
+                  print(f"::warning::Region preset {k!r} lastVerified ({v[\"lastVerified\"]}) is {age} days old — review regulatory caps & directories.")
+          '
+
+  e2e:
+    name: Web PWA E2E (Playwright Chromium)
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Playwright Chromium (dev-only, zero repo deps)
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E checks
+        run: node tests/e2e.mjs

@@ -61,13 +61,15 @@ if (isNode) {
   const vm = require("vm");
   const root = path.resolve(__dirname, "..");
   // Expose const/let bindings cleanly inside current global context
-  for (const fname of ["schema.js", "regions.js", "app.js"]) {
+  for (const fname of ["schema.js", "regions.js", "crypto.js", "standalone.js", "app.js"]) {
     const code = fs.readFileSync(path.join(root, fname), "utf8");
     vm.runInThisContext(code, { filename: fname });
   }
 } else {
   load("schema.js");
   load("regions.js");
+  load("crypto.js");
+  load("standalone.js");
   load("app.js");
 }
 
@@ -296,6 +298,7 @@ engageBrowserLockScreen();
 assert(!S.f && els.panels.innerHTML === "" && els.lockScreen.innerHTML.includes("lsTogCards") && els.lockScreen.innerHTML.includes("lsReset"), "lock screen wipes state/DOM and renders recovery + reset");
 
 assert(!saHtml.includes("window.open(this.src)") && !/onclick=/i.test(saHtml), "standalone html removes unsafe window.open and inline onclick");
+assert(saHtml.includes("Content-Security-Policy") && saHtml.includes("connect-src 'none'"), "standalone html enforces network-blocking CSP");
 assert(saHtml.includes("saLightbox") && saHtml.includes("saLock"), "standalone html includes lightbox and lock control");
 
 quickStartWizard();
