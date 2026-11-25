@@ -88,7 +88,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   const navH = await page.evaluate(() => Math.round(document.getElementById("tabs").getBoundingClientRect().height));
   assert(navH > 24 && navH <= 60, `mobile nav.tabs should be single-row (got ${navH}px)`);
-  await page.focus('#panels input[data-f]');
+  await page.focus('#panels .panel.on input[data-f]');
   assert(await page.evaluate(() => document.body.classList.contains("mobile-editing")), "mobile-editing class active on input focus");
 
   assert(errors.length === 0, "Zero page errors expected, got: " + errors.join("; "));
